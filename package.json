@@ -8,14 +8,13 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm db:setup && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./tests/register-hooks.mjs --test tests/*.test.ts",
+    "db:setup": "node --env-file-if-exists=.env.local scripts/db-setup.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
-    "db:seed": "node --import ./tests/register-hooks.mjs scripts/seed-prompts.ts"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

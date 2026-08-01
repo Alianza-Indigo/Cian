@@ -28,10 +28,13 @@ Vercel, región `iad1`.
 ```bash
 pnpm install
 cp .env.example .env.local     # llenar POSTGRES_URL, AUTH_SECRET y las de Google
-pnpm db:migrate                # aplica las migraciones
-pnpm db:seed                   # carga los prompts de prompts/seed/
+pnpm db:setup                  # aplica migraciones y carga los prompts
 pnpm dev
 ```
+
+`pnpm build` ejecuta `db:setup` antes de compilar, así que **cada despliegue
+deja la base al día por sí solo**. Si no hay `POSTGRES_URL`, el paso avisa y se
+hace a un lado en vez de romper el build.
 
 El service worker solo se registra en producción, así que la instalación como
 PWA se prueba con `pnpm build && pnpm start`.
@@ -45,8 +48,7 @@ PWA se prueba con `pnpm build && pnpm start`.
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm test` | Pruebas de aislamiento multi-tenant |
 | `pnpm db:generate` | Genera migraciones desde el esquema |
-| `pnpm db:migrate` | Aplica migraciones |
-| `pnpm db:seed` | Carga los prompts versionados |
+| `pnpm db:setup` | Aplica migraciones y carga los prompts (corre solo en cada build) |
 | `node scripts/generate-icons.mjs` | Regenera los iconos de la PWA |
 
 ## Cómo está organizado

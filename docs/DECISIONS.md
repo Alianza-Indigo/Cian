@@ -113,6 +113,32 @@ mostrar nada.
 prohibiciones del PRD descartan dependencias con binarios nativos (`sharp`,
 `canvas`), y la marca es lo bastante simple para dibujarla por píxel.
 
+### Las migraciones se aplican en el build
+
+`pnpm build` ejecuta `scripts/db-setup.mjs` antes de `next build`, así que cada
+despliegue aplica las migraciones pendientes y carga los prompts de
+`prompts/seed/`.
+
+Motivo: sin esto, «desplegar» y «tener la base al día» son dos pasos separados y
+el segundo se olvida. Ya pasó en la Fase 0 — el primer despliegue quedó con la
+base vacía y el login devolvió `error=Configuration`.
+
+El script está escrito para ser seguro de repetir: Drizzle lleva su propia tabla
+de control y solo aplica lo que falta, un prompt sin cambios no genera versión
+nueva, y **si falta `POSTGRES_URL` avisa y se hace a un lado en vez de romper el
+build**. Un proyecto sin base conectada sigue desplegando.
+
+**Riesgo a vigilar cuando haya más de un entorno:** en Vercel, los despliegues
+de Preview heredan las variables de Producción salvo que se les dé un store
+propio. Con esta configuración, un Preview que traiga una migración nueva la
+aplicaría **sobre la base de producción**. Mientras haya un solo entorno no
+importa; en cuanto se empiece a usar Preview en serio, hay que darle su propio
+store de Postgres. Anotado también en `docs/NOTES.md`.
+
+Migraciones destructivas: Drizzle las genera pero nadie las revisa por ti. A
+partir del momento en que haya datos de personas reales, toda migración que
+borre o transforme columnas debe leerse antes de mezclar a `main`.
+
 ### Proveedor de IA: Google Gemini 3.1 Flash-Lite
 
 Decisión del responsable, tomada durante la Fase 0 y aplicable a partir de la

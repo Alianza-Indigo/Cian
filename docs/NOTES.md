@@ -27,14 +27,28 @@ ejecución**, y deben comprobarse al desplegar:
 ### Pasos para cerrar la fase en Vercel
 
 1. Crear el proyecto en Vercel y el store de Postgres **en la región `iad1`**
-   (debe coincidir con `vercel.json`).
+   (debe coincidir con `vercel.json`). Conectarlo al proyecto: Vercel inyecta
+   `POSTGRES_URL` y dispara un redespliegue.
 2. Configurar `AUTH_SECRET` (`openssl rand -base64 32`), `AUTH_GOOGLE_ID` y
    `AUTH_GOOGLE_SECRET`. En Google Cloud Console, el URI de redirección
    autorizado es `https://DOMINIO/api/auth/callback/google`.
-3. `pnpm db:migrate` para aplicar la migración.
-4. `pnpm db:seed` para cargar los prompts de `prompts/seed/`.
-5. Verificar en un teléfono Android y en un iPhone que la app se instala y abre
+   Ojo: cambiar variables **no** afecta a un despliegue ya hecho; hay que
+   volver a desplegar.
+3. Las migraciones y el seed ya no son un paso manual: `pnpm build` corre
+   `db:setup` antes de compilar, así que el redespliegue del punto 1 los aplica.
+4. Verificar en un teléfono Android y en un iPhone que la app se instala y abre
    en modo standalone.
+
+### Preview comparte base con Producción
+
+Los despliegues de Preview heredan las variables de Producción salvo que se les
+asigne un store propio. Hoy eso significa que **un Preview con una migración
+nueva la aplicaría sobre la base de producción**, porque `db:setup` corre en
+todo build.
+
+Mientras haya un solo entorno no molesta. En cuanto se empiece a usar Preview de
+verdad —seguramente al abrir la Fase 1 a más gente— hay que darle su propio
+store de Postgres.
 
 ### Deuda técnica y decisiones aplazadas
 
