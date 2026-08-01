@@ -74,7 +74,9 @@ export type MessagePart = {
 export const messages = pgTable(
   'messages',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),

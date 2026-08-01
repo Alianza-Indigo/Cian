@@ -50,7 +50,7 @@ const requestSchema = z.object({
   id: z.uuid(),
   messages: z.array(z.custom<UIMessage>()).min(1),
   /** Si viene, se borra ese mensaje y los siguientes: edición o reintento. */
-  regenerateFromMessageId: z.uuid().optional(),
+  regenerateFromMessageId: z.string().min(1).max(200).optional(),
 });
 
 function textOf(message: UIMessage): string {

@@ -34,7 +34,7 @@ export const userMemories = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     key: text('key').notNull(),
     value: text('value').notNull(),
-    sourceMessageId: uuid('source_message_id').references(() => messages.id, {
+    sourceMessageId: text('source_message_id').references(() => messages.id, {
       onDelete: 'set null',
     }),
     confirmedByUser: boolean('confirmed_by_user').notNull().default(false),
