@@ -9,11 +9,7 @@
  */
 import { google } from '@ai-sdk/google';
 
-const DEFAULT_MODEL_ID = 'gemini-3.1-flash-lite-preview';
-
-const MODEL_ALIASES: Record<string, string> = {
-  'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite-preview',
-};
+const DEFAULT_MODEL_ID = 'gemini-3.1-flash-lite';
 
 /**
  * El identificador se puede sobrescribir por entorno.
@@ -25,12 +21,9 @@ const MODEL_ALIASES: Record<string, string> = {
  */
 function modelIdFromEnv(variable: string): string {
   const value = process.env[variable];
-  const modelId =
-    typeof value === 'string' && value.trim().length > 0
-      ? value.trim()
-      : DEFAULT_MODEL_ID;
-
-  return MODEL_ALIASES[modelId] ?? modelId;
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : DEFAULT_MODEL_ID;
 }
 
 /** Conversación con el orquestador. */
