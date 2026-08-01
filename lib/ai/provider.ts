@@ -9,11 +9,28 @@
  */
 import { google } from '@ai-sdk/google';
 
+const DEFAULT_MODEL_ID = 'gemini-3.1-flash-lite';
+
+/**
+ * El identificador se puede sobrescribir por entorno.
+ *
+ * Los nombres de modelo cambian con más frecuencia que el código, y un
+ * identificador equivocado deja el chat inservible. Poder corregirlo desde
+ * Vercel evita esperar a un despliegue. El valor por defecto sigue siendo el
+ * que fija la decisión de arquitectura.
+ */
+function modelIdFromEnv(variable: string): string {
+  const value = process.env[variable];
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : DEFAULT_MODEL_ID;
+}
+
 /** Conversación con el orquestador. */
-export const CHAT_MODEL_ID = 'gemini-3.1-flash-lite';
+export const CHAT_MODEL_ID = modelIdFromEnv('CIAN_CHAT_MODEL');
 
 /** Tareas cortas de apoyo, como titular una conversación. */
-export const UTILITY_MODEL_ID = 'gemini-3.1-flash-lite';
+export const UTILITY_MODEL_ID = modelIdFromEnv('CIAN_UTILITY_MODEL');
 
 export function chatModel() {
   return google(CHAT_MODEL_ID);

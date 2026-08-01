@@ -24,6 +24,7 @@ import { getPromptOrFallback, ORCHESTRATOR_FALLBACK } from '@/lib/ai/prompts';
 import { trimToBudget } from '@/lib/ai/context-window';
 import { checkChatRateLimit } from '@/lib/ai/rate-limit';
 import { generateConversationTitle } from '@/lib/ai/title';
+import { toUserFacingError } from '@/lib/ai/errors';
 import {
   ensureConversation,
   countMessages,
@@ -165,6 +166,12 @@ export async function POST(request: Request): Promise<Response> {
 
   return result.toUIMessageStreamResponse({
     originalMessages: payload.messages,
+    /*
+     * Sin esto, el AI SDK enmascara cualquier fallo del proveedor con un
+     * "An error occurred" que no dice nada ni a la persona ni a quien depura.
+     * El detalle real queda en los registros del servidor.
+     */
+    onError: toUserFacingError,
     // El mensaje del asistente se guarda cuando termina de escribirse, con
     // el mismo identificador que ya tiene el cliente.
     async onFinish({ responseMessage }) {
