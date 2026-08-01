@@ -5,6 +5,75 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 1 — Chat y orquestador
+
+### Criterios que no se pudieron verificar en esta sesión
+
+El entorno de trabajo no tiene clave del modelo ni salida de red hacia el
+proveedor, así que todo lo que exige una respuesta real del modelo queda
+**implementado pero sin verificar en ejecución**:
+
+1. **Una conversación de 40 mensajes se mantiene coherente.** El recorte está
+   probado con 316 pruebas —incluido el caso de 40 mensajes— pero contra la
+   función, no contra el modelo.
+2. **El streaming empieza en menos de 2 segundos.** Depende de la latencia de
+   Flash-Lite y de la región; hay que medirlo desplegado.
+3. **El modelo llama `saveMemory`** ante «recuerda que le molestan los ruidos
+   fuertes». La tool está registrada y descrita; que Flash-Lite la dispare de
+   forma fiable es justo lo que había que vigilar (ver DECISIONS.md).
+4. **`usage_events` registra cada intercambio.** El código está en el `onFinish`
+   del `streamText`, despachado con `waitUntil`.
+
+Lo que sí quedó verificado en ejecución: `/api/chat` responde **401 en JSON**
+sin sesión (no una redirección a HTML, que al cliente le llegaría ilegible), el
+build es limpio y las 316 pruebas pasan.
+
+### Deuda técnica y decisiones aplazadas
+
+- **`@vercel/kv` está marcado como obsoleto** por su autor. Funciona, y el PRD
+  fija Vercel KV en el stack, así que se instaló igual. Todo el acceso pasa por
+  `lib/kv.ts`, de modo que migrar a `@upstash/redis` sea cambiar un archivo.
+  Conviene proponerlo antes de que más fases dependan de la caché.
+
+- **Sin KV configurado, no hay límite de uso.** `checkChatRateLimit` deja pasar
+  cuando KV no responde. Es deliberado —preferimos gastar de más antes que
+  dejar sin asistente a alguien que lo necesita— pero significa que **el
+  criterio de rate limit no se cumple hasta conectar un store de Redis**.
+
+- **Las respuestas se muestran como texto plano, sin Markdown.** Convertir la
+  salida del modelo en HTML sin un sanitizador revisado es una vía de inyección.
+  Es una limitación visible —las listas y negritas salen con sus asteriscos— y
+  merece resolverse pronto, con una biblioteca elegida a conciencia.
+
+- **La búsqueda del historial filtra en el cliente** sobre las 100
+  conversaciones más recientes que ya se cargaron. Para el volumen de una
+  persona alcanza; cuando alguien acumule cientos, hay que mover el filtro al
+  servidor. `listConversations` ya acepta `search`, así que el repositorio está
+  listo.
+
+- **`maxDuration = 60`** en `app/api/chat/route.ts`. Es el techo del plan Hobby
+  de Vercel. Si el proyecto está en Pro, se puede subir; si se sube por encima
+  del techo del plan, **el despliegue falla**, no la ejecución.
+
+- **El guardado del mensaje del asistente puede fallar en silencio.** Si la
+  escritura falla tras el streaming, la persona ya vio la respuesta pero no
+  queda en el historial. Se prefirió eso a interrumpir una conversación en
+  curso. Si se vuelve frecuente, hay que reintentar con `waitUntil`.
+
+- **Editar un mensaje borra lo que venía después**, en pantalla y en la base.
+  Es lo que evita que el modelo se confunda con intentos fallidos acumulados,
+  pero no hay deshacer. Vale la pena avisarlo en la interfaz si alguien se
+  queja.
+
+### Para la Fase 2
+
+- `messages.parts` guarda el formato del AI SDK tal cual, así que los adjuntos
+  de la Fase 4 y las llamadas a tools entran sin migrar la tabla.
+- `buildTools` es el único punto donde se registran capacidades. La Fase 2 añade
+  `createDocument` ahí y no toca `app/api/chat/route.ts`.
+
+---
+
 ## Fase 0 — Fundación
 
 ### Criterios que no se pudieron verificar en esta sesión

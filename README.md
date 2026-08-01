@@ -11,8 +11,10 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 0 — Fundación.** Base multi-tenant, autenticación y shell de la
-aplicación. Todavía sin conversación ni módulos: eso llega en la Fase 1.
+**Fase 1 — Chat y orquestador.** La conversación ya funciona: streaming,
+historial persistente, memoria de la persona usuaria y el orquestador con su
+primer registro de tools. Sin adjuntos, sin voz y sin módulos funcionales: eso
+llega en las fases siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -57,15 +59,20 @@ PWA se prueba con `pnpm build && pnpm start`.
 app/
   (auth)/login/                pantalla de acceso
   (app)/                       rutas autenticadas, con shell
+    chat/[id]/                 una conversación
+    memorias/                  lo que CIAN recuerda de ti
     configuracion/accesibilidad/
   api/auth/[...nextauth]/
+  api/chat/                    el orquestador
 components/
   ui/                          primitivas sobre elementos nativos
-  shell/  brand/  pwa/
+  chat/  shell/  brand/  pwa/
 lib/
   db/schema/                   un archivo por dominio
   db/repositories/             acceso a datos, siempre con TenantContext
   db/migrations/
+  ai/                          modelo, prompts, tools, recorte de contexto
+    tools/                     una carpeta por módulo
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación

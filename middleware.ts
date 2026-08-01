@@ -36,7 +36,14 @@ export function middleware(request: NextRequest): NextResponse {
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
 
-  if (!isPublic && !hasSessionCookie(request)) {
+  /*
+   * Las rutas de API nunca se redirigen: quien las llama espera JSON, y una
+   * redirección a HTML le llega como una respuesta ilegible. Cada handler
+   * comprueba la sesión por su cuenta y responde 401 como debe ser.
+   */
+  const isApiRoute = pathname.startsWith('/api/');
+
+  if (!isPublic && !isApiRoute && !hasSessionCookie(request)) {
     const loginUrl = new URL('/login', request.url);
     if (pathname !== '/') {
       loginUrl.searchParams.set('siguiente', `${pathname}${search}`);

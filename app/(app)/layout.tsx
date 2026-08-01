@@ -2,21 +2,29 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { requireTenantContext } from '@/lib/tenant/context';
 import { getCurrentTenant } from '@/lib/db/repositories/tenants';
+import { listConversations } from '@/lib/db/repositories/conversations';
 import { AppShell, type NavItem } from '@/components/shell/app-shell';
 
-// Toda ruta autenticada es dinamica: depende de sesion y de tenant.
+// Toda ruta autenticada es dinámica: depende de sesión y de tenant.
 export const dynamic = 'force-dynamic';
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', label: 'Inicio', icon: 'inicio' },
-  { href: '/configuracion/accesibilidad', label: 'Accesibilidad', icon: 'configuracion' },
+  { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
+  {
+    href: '/configuracion/accesibilidad',
+    label: 'Accesibilidad',
+    icon: 'configuracion',
+  },
 ];
 
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [session, ctx] = await Promise.all([auth(), requireTenantContext()]);
-  const tenant = await getCurrentTenant(ctx);
+  const [tenant, conversations] = await Promise.all([
+    getCurrentTenant(ctx),
+    listConversations(ctx, { limit: 100 }),
+  ]);
 
   if (!tenant) {
     redirect('/login');
@@ -28,6 +36,11 @@ export default async function AppLayout({
       userName={session?.user?.name ?? 'Tu cuenta'}
       userEmail={session?.user?.email ?? ''}
       navItems={NAV_ITEMS}
+      conversations={conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        status: conversation.status,
+      }))}
     >
       {children}
     </AppShell>

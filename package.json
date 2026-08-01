@@ -17,8 +17,13 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.31",
+    "@ai-sdk/react": "^4.0.50",
     "@auth/drizzle-adapter": "^1.11.3",
+    "@vercel/functions": "^3.7.6",
+    "@vercel/kv": "^3.0.0",
     "@vercel/postgres": "^0.10.0",
+    "ai": "^7.0.47",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.44.7",

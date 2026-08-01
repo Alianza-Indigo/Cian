@@ -40,12 +40,43 @@ import {
   activatePromptVersion,
   listPromptVersions,
 } from '../lib/db/repositories/prompts';
+import {
+  countMessages,
+  deleteConversation,
+  ensureConversation,
+  getConversation,
+  listConversations,
+  renameConversation,
+  setAutoTitle,
+  setConversationStatus,
+  touchConversation,
+} from '../lib/db/repositories/conversations';
+import {
+  appendMessage,
+  deleteFromMessage,
+  deleteMessages,
+  getMessage,
+  listMessages,
+} from '../lib/db/repositories/messages';
+import {
+  deleteAllMemories,
+  deleteMemory,
+  listMemories,
+  saveMemory,
+  searchMemories,
+  updateMemory,
+} from '../lib/db/repositories/memories';
+import { recordUsage, sumUsageSince } from '../lib/db/repositories/usage';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
   userId: 'usuario-1',
   role: 'owner',
 };
+
+/** Identificadores de prueba. Nunca llegan a la base: el guardián corta antes. */
+const CONV = '11111111-2222-4333-8444-555555555555';
+const MSG = '66666666-7777-4888-8999-aaaaaaaaaaaa';
 
 /** Contextos que ninguna funcion de repositorio debe aceptar. */
 const INVALID_CONTEXTS: Array<[string, unknown]> = [
@@ -99,6 +130,58 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       (ctx) =>
         activatePromptVersion(ctx as TenantContext, 'orchestrator.system', 1),
     ],
+
+    // --- Fase 1: conversaciones, mensajes, memoria y consumo ---------------
+    ['ensureConversation', (ctx) => ensureConversation(ctx as TenantContext, CONV)],
+    ['getConversation', (ctx) => getConversation(ctx as TenantContext, CONV)],
+    ['listConversations', (ctx) => listConversations(ctx as TenantContext)],
+    [
+      'renameConversation',
+      (ctx) => renameConversation(ctx as TenantContext, CONV, 'Otro título'),
+    ],
+    ['setAutoTitle', (ctx) => setAutoTitle(ctx as TenantContext, CONV, 'Título')],
+    [
+      'setConversationStatus',
+      (ctx) => setConversationStatus(ctx as TenantContext, CONV, 'archived'),
+    ],
+    ['deleteConversation', (ctx) => deleteConversation(ctx as TenantContext, CONV)],
+    ['touchConversation', (ctx) => touchConversation(ctx as TenantContext, CONV)],
+    ['countMessages', (ctx) => countMessages(ctx as TenantContext, CONV)],
+
+    [
+      'appendMessage',
+      (ctx) =>
+        appendMessage(ctx as TenantContext, {
+          conversationId: CONV,
+          role: 'user',
+          parts: [{ type: 'text', text: 'hola' }],
+        }),
+    ],
+    ['getMessage', (ctx) => getMessage(ctx as TenantContext, MSG)],
+    ['listMessages', (ctx) => listMessages(ctx as TenantContext, CONV)],
+    [
+      'deleteFromMessage',
+      (ctx) => deleteFromMessage(ctx as TenantContext, CONV, MSG),
+    ],
+    ['deleteMessages', (ctx) => deleteMessages(ctx as TenantContext, [MSG])],
+
+    [
+      'saveMemory',
+      (ctx) =>
+        saveMemory(ctx as TenantContext, { key: 'ruidos', value: 'le molestan' }),
+    ],
+    ['listMemories', (ctx) => listMemories(ctx as TenantContext)],
+    ['searchMemories', (ctx) => searchMemories(ctx as TenantContext, 'ruido')],
+    ['updateMemory', (ctx) => updateMemory(ctx as TenantContext, MSG, 'otro')],
+    ['deleteMemory', (ctx) => deleteMemory(ctx as TenantContext, MSG)],
+    ['deleteAllMemories', (ctx) => deleteAllMemories(ctx as TenantContext)],
+
+    [
+      'recordUsage',
+      (ctx) =>
+        recordUsage(ctx as TenantContext, { kind: 'chat', model: 'prueba' }),
+    ],
+    ['sumUsageSince', (ctx) => sumUsageSince(ctx as TenantContext, new Date(0))],
   ];
 
 describe('assertTenantContext', () => {

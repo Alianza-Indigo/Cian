@@ -3,20 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Menu, Settings, X } from 'lucide-react';
+import { Brain, Menu, Plus, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
 import { signOutAction } from '@/lib/auth/actions';
+import {
+  ConversationHistory,
+  type ConversationSummary,
+} from './conversation-history';
 
 export type NavItem = {
   href: string;
   label: string;
-  icon: 'inicio' | 'configuracion';
+  icon: 'memorias' | 'configuracion';
 };
 
 const ICONS = {
-  inicio: Home,
+  memorias: Brain,
   configuracion: Settings,
 } as const;
 
@@ -25,6 +29,7 @@ type AppShellProps = {
   userName: string;
   userEmail: string;
   navItems: readonly NavItem[];
+  conversations: ConversationSummary[];
   children: React.ReactNode;
 };
 
@@ -33,6 +38,7 @@ export function AppShell({
   userName,
   userEmail,
   navItems,
+  conversations,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -40,7 +46,7 @@ export function AppShell({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  // El cajon se cierra al navegar: en telefono, quedarse abierto sobre el
+  // El cajón se cierra al navegar: en teléfono, quedarse abierto sobre el
   // contenido nuevo desorienta.
   useEffect(() => {
     setDrawerOpen(false);
@@ -62,40 +68,8 @@ export function AppShell({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [drawerOpen]);
 
-  const navigation = (
-    <nav aria-label="Secciones de CIAN" className="min-w-0 flex-1">
-      <ul className="space-y-1">
-        {navItems.map((item) => {
-          const Icon = ICONS[item.icon];
-          const active =
-            pathname === item.href ||
-            (item.href !== '/' && pathname.startsWith(`${item.href}/`));
-
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-primary-soft text-foreground'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                )}
-                style={{ minHeight: 'var(--cian-control-height)' }}
-              >
-                <Icon aria-hidden="true" className="size-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-
   const sidebarBody = (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-3 p-4">
       <div className="flex items-center gap-3">
         <CianMark className="size-9" />
         <div className="min-w-0">
@@ -104,9 +78,46 @@ export function AppShell({
         </div>
       </div>
 
-      {navigation}
+      <Link
+        href="/"
+        className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        style={{ minHeight: 'var(--cian-control-height)' }}
+      >
+        <Plus aria-hidden="true" className="size-4" />
+        Nueva conversación
+      </Link>
 
-      <div className="border-t border-border pt-4">
+      <ConversationHistory conversations={conversations} />
+
+      <nav aria-label="Secciones de CIAN" className="border-t border-border pt-2">
+        <ul className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = ICONS[item.icon];
+            const active = pathname.startsWith(item.href);
+
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                    active
+                      ? 'bg-primary-soft text-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                >
+                  <Icon aria-hidden="true" className="size-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div className="border-t border-border pt-3">
         <p className="truncate text-sm font-medium">{userName}</p>
         <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
         <form action={signOutAction} className="mt-3">
@@ -119,13 +130,11 @@ export function AppShell({
   );
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
-      {/* Barra lateral fija en escritorio */}
+    <div className="min-h-dvh lg:grid lg:grid-cols-[18rem_1fr]">
       <aside className="hidden border-r border-border bg-card lg:block">
         <div className="sticky top-0 h-dvh">{sidebarBody}</div>
       </aside>
 
-      {/* Cajon en telefono */}
       {drawerOpen ? (
         <div className="lg:hidden">
           <button
@@ -139,7 +148,7 @@ export function AppShell({
             role="dialog"
             aria-modal="true"
             aria-label="Menú de navegación"
-            className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-border bg-card"
+            className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] border-r border-border bg-card"
           >
             <div className="flex justify-end p-2">
               <Button
@@ -156,7 +165,7 @@ export function AppShell({
                 <X aria-hidden="true" />
               </Button>
             </div>
-            {sidebarBody}
+            <div className="h-[calc(100%-3.5rem)]">{sidebarBody}</div>
           </div>
         </div>
       ) : null}
@@ -178,6 +187,14 @@ export function AppShell({
             <CianMark className="size-7" />
             <span className="truncate text-sm font-semibold">CIAN</span>
           </div>
+          <Link
+            href="/"
+            aria-label="Nueva conversación"
+            className="ml-auto flex items-center justify-center rounded-lg border border-border px-3"
+            style={{ minHeight: 'var(--cian-control-height)' }}
+          >
+            <Plus aria-hidden="true" className="size-4" />
+          </Link>
         </header>
 
         <main
@@ -187,11 +204,6 @@ export function AppShell({
         >
           <div className="mx-auto w-full max-w-3xl">{children}</div>
         </main>
-
-        <footer className="border-t border-border px-4 py-4 text-center text-xs text-muted-foreground sm:px-6 lg:px-8">
-          CIAN no sustituye atención médica, psicológica, terapéutica ni legal.
-          No diagnostica ni prescribe, y no es un servicio de emergencia.
-        </footer>
       </div>
     </div>
   );

@@ -8,6 +8,13 @@
       "when": 1785612996692,
       "tag": "0000_solid_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785616966501,
+      "tag": "0001_supreme_toad_men",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,29 @@
+/**
+ * Registro de tools del orquestador. Regla 3.2 del PRD.
+ *
+ * El modelo decide qué usar; el código no adivina la intención con palabras
+ * clave ni clasificadores. Agregar un módulo en una fase posterior significa
+ * registrar tools nuevas aquí, **nunca** tocar la lógica del orquestador.
+ *
+ * Toda tool recibe el `TenantContext` por cierre, jamás como argumento del
+ * modelo: el modelo no debe poder elegir sobre qué tenant opera.
+ */
+import type { Tool } from 'ai';
+import type { TenantContext } from '../../tenant/guard';
+import { buildMemoryTools } from './memory';
+import { buildUserContextTools } from './user-context';
+
+export type ToolRegistry = Record<string, Tool>;
+
+export type ToolContext = {
+  ctx: TenantContext;
+  /** Mensaje que originó el turno, para poder rastrear de dónde salió una memoria. */
+  sourceMessageId: string | null;
+};
+
+export function buildTools(toolContext: ToolContext): ToolRegistry {
+  return {
+    ...buildUserContextTools(toolContext),
+    ...buildMemoryTools(toolContext),
+  };
+}
