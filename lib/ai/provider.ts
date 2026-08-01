@@ -7,9 +7,14 @@
  *
  * Decisión registrada en docs/DECISIONS.md.
  */
-import { google } from '@ai-sdk/google';
+import { createGoogle } from '@ai-sdk/google';
 
 const DEFAULT_MODEL_ID = 'gemini-3.1-flash-lite';
+const GOOGLE_API_KEY_ENV_NAMES = [
+  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+] as const;
 
 /**
  * El identificador se puede sobrescribir por entorno.
@@ -32,19 +37,45 @@ export const CHAT_MODEL_ID = modelIdFromEnv('CIAN_CHAT_MODEL');
 /** Tareas cortas de apoyo, como titular una conversación. */
 export const UTILITY_MODEL_ID = modelIdFromEnv('CIAN_UTILITY_MODEL');
 
+function googleApiKeyFromEnv(): string | undefined {
+  for (const name of GOOGLE_API_KEY_ENV_NAMES) {
+    const value = process.env[name];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function googleProvider() {
+  const apiKey = googleApiKeyFromEnv();
+  if (!apiKey) {
+    throw new Error(
+      `Google Generative AI API key is missing. Set ${GOOGLE_API_KEY_ENV_NAMES.join(
+        ', ',
+      )}.`,
+    );
+  }
+
+  return createGoogle({ apiKey });
+}
+
 export function chatModel() {
-  return google(CHAT_MODEL_ID);
+  return googleProvider()(CHAT_MODEL_ID);
 }
 
 export function utilityModel() {
-  return google(UTILITY_MODEL_ID);
+  return googleProvider()(UTILITY_MODEL_ID);
 }
 
 /**
- * `@ai-sdk/google` lee `GOOGLE_GENERATIVE_AI_API_KEY`. Se comprueba aquí para
- * poder dar un mensaje entendible en vez de un fallo del proveedor.
+ * `@ai-sdk/google` lee `GOOGLE_GENERATIVE_AI_API_KEY`, mientras que la
+ * documentación de Gemini suele nombrar la clave como `GEMINI_API_KEY` o
+ * `GOOGLE_API_KEY`. CIAN acepta las tres y descarta valores vacíos.
  */
 export function isModelConfigured(): boolean {
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  return typeof key === 'string' && key.trim().length > 0;
+  return googleApiKeyFromEnv() != null;
 }
+
+export const __googleApiKeyEnvNamesForTests = GOOGLE_API_KEY_ENV_NAMES;

@@ -153,7 +153,7 @@ paquete del proveedor y la credencial.
 |---|---|
 | Paquete | `@ai-sdk/google` (verificado: v4.0.31) |
 | Modelo | `gemini-3.1-flash-lite` |
-| Variable de entorno | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| Variable de entorno | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY` o `GOOGLE_API_KEY` |
 | Compatibilidad | `@ai-sdk/provider` 4.x con `ai` 7.x; peer `zod ^4.1.8`, el proyecto ya trae `zod ^4.1.12` |
 
 **No** se usa `@ai-sdk/google-vertex`: la autenticación de Vertex AI es por
