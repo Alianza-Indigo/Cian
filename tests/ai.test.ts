@@ -15,6 +15,7 @@ import {
 } from '../lib/ai/context-window';
 import { __tidyTitleForTests as tidyTitle } from '../lib/ai/title';
 import { __normalizeMemoryKeyForTests as normalizeKey } from '../lib/db/repositories/memories';
+import { humanizeChatError } from '../lib/ai/client-errors';
 
 function message(role: 'user' | 'assistant', text: string, id: string): UIMessage {
   return { id, role, parts: [{ type: 'text', text }] } as UIMessage;
@@ -104,5 +105,35 @@ describe('normalización de claves de memoria', () => {
 
   it('acota la longitud', () => {
     assert.ok(normalizeKey('a'.repeat(200)).length <= 80);
+  });
+});
+
+describe('presentación de errores del chat', () => {
+  it('extrae el mensaje de nuestro JSON de error', () => {
+    const error = new Error('{"error":"Necesitas iniciar sesión para escribir."}');
+    assert.equal(
+      humanizeChatError(error),
+      'Necesitas iniciar sesión para escribir.',
+    );
+  });
+
+  it('no deja pasar llaves ni comillas a la pantalla', () => {
+    const error = new Error('{"error":"Algo pasó"}');
+    const shown = humanizeChatError(error);
+    assert.ok(!shown.includes('{'));
+    assert.ok(!shown.includes('"error"'));
+  });
+
+  it('traduce los fallos de red', () => {
+    assert.match(
+      humanizeChatError(new Error('Failed to fetch')),
+      /conexión/i,
+    );
+  });
+
+  it('sobrevive a un JSON malformado y a la ausencia de error', () => {
+    assert.equal(typeof humanizeChatError(new Error('{roto')), 'string');
+    assert.ok(humanizeChatError(undefined).length > 0);
+    assert.ok(humanizeChatError(new Error('')).length > 0);
   });
 });

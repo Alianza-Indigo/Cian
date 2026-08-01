@@ -6,6 +6,7 @@ import { Pencil, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
+import { humanizeChatError } from '@/lib/ai/client-errors';
 
 type MessageListProps = {
   messages: UIMessage[];
@@ -119,7 +120,7 @@ export function MessageList({
           role="alert"
           className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm"
         >
-          <p>{error.message || 'No pudimos completar la respuesta.'}</p>
+          <p>{humanizeChatError(error)}</p>
           <Button
             type="button"
             variant="outline"
