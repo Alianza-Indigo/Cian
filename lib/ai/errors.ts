@@ -24,11 +24,56 @@ const QUOTA =
 const OVERLOADED =
   'El modelo está saturado en este momento. Espera unos segundos y vuelve a intentarlo.';
 
+const USER_FACING_MESSAGES = new Set([
+  GENERIC,
+  CONFIGURATION,
+  QUOTA,
+  OVERLOADED,
+]);
+
+type ProviderErrorLike = Error & {
+  statusCode?: unknown;
+  url?: unknown;
+  responseBody?: unknown;
+  cause?: unknown;
+};
+
+function redact(value: string): string {
+  return value
+    .replace(/(key=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/(api[_-]?key["']?\s*[:=]\s*["']?)[^"',\s}]+/gi, '$1[redacted]');
+}
+
 function describe(error: unknown): string {
   if (error instanceof Error) {
-    return `${error.name}: ${error.message}`;
+    const providerError = error as ProviderErrorLike;
+    const details = [`${error.name}: ${error.message}`];
+
+    if (typeof providerError.statusCode === 'number') {
+      details.push(`status=${providerError.statusCode}`);
+    }
+
+    if (typeof providerError.url === 'string') {
+      details.push(`url=${redact(providerError.url)}`);
+    }
+
+    if (typeof providerError.responseBody === 'string') {
+      details.push(
+        `responseBody=${redact(providerError.responseBody).slice(0, 2000)}`,
+      );
+    }
+
+    if (providerError.cause instanceof Error) {
+      details.push(`cause=${providerError.cause.name}: ${providerError.cause.message}`);
+    }
+
+    return details.join(' | ');
   }
-  return String(error);
+  return redact(String(error));
+}
+
+export function logRawProviderError(error: unknown): void {
+  console.error('[chat] fallo crudo del proveedor —', describe(error));
 }
 
 /**
@@ -39,7 +84,9 @@ export function toUserFacingError(error: unknown): string {
   const detail = describe(error);
 
   // Queda en los logs de Vercel (Runtime), no en la respuesta.
-  console.error('[chat] fallo del proveedor —', detail);
+  if (!(error instanceof Error && USER_FACING_MESSAGES.has(error.message))) {
+    console.error('[chat] fallo del proveedor —', detail);
+  }
 
   const haystack = detail.toLowerCase();
 

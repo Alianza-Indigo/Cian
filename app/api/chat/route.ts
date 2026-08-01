@@ -24,7 +24,7 @@ import { getPromptOrFallback, ORCHESTRATOR_FALLBACK } from '@/lib/ai/prompts';
 import { trimToBudget } from '@/lib/ai/context-window';
 import { checkChatRateLimit } from '@/lib/ai/rate-limit';
 import { generateConversationTitle } from '@/lib/ai/title';
-import { toUserFacingError } from '@/lib/ai/errors';
+import { logRawProviderError, toUserFacingError } from '@/lib/ai/errors';
 import {
   ensureConversation,
   countMessages,
@@ -126,6 +126,9 @@ export async function POST(request: Request): Promise<Response> {
     messages: modelMessages,
     tools: buildTools({ ctx, sourceMessageId: userMessage.id }),
     stopWhen: stepCountIs(MAX_STEPS),
+    onError({ error }) {
+      logRawProviderError(error);
+    },
     onFinish({ usage }) {
       // Nada de esto debe retrasar la respuesta que ya está en pantalla.
       waitUntil(
