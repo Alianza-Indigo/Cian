@@ -152,7 +152,7 @@ paquete del proveedor y la credencial.
 | Concepto | Valor |
 |---|---|
 | Paquete | `@ai-sdk/google` (verificado: v4.0.31) |
-| Modelo | `gemini-3.1-flash-lite` |
+| Modelo | Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite-preview` en la API) |
 | Variable de entorno | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | Compatibilidad | `@ai-sdk/provider` 4.x con `ai` 7.x; peer `zod ^4.1.8`, el proyecto ya trae `zod ^4.1.12` |
 
