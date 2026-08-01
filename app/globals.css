@@ -1,0 +1,199 @@
+@import 'tailwindcss';
+
+/*
+ * Modo oscuro por atributo, no por clase ni por media query: la preferencia
+ * vive en `user_preferences` y se aplica en <html data-theme>. Asi la eleccion
+ * de la persona gana sobre la del sistema operativo.
+ */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ---------------------------------------------------------------------------
+ * Identidad visual (regla 4.2)
+ *   Indigo #1B1F5A primario · Oro #C9A227 acento · neutros calidos
+ * Sin degradados llamativos, sin sombras duras, sin ruido visual.
+ * ------------------------------------------------------------------------ */
+:root,
+[data-theme='light'] {
+  --background: #faf8f5;
+  --foreground: #1f1b16;
+  --card: #ffffff;
+  --card-foreground: #1f1b16;
+  --muted: #f0ebe3;
+  --muted-foreground: #5c5349;
+  --border: #e3dcd1;
+  --input: #e3dcd1;
+
+  --primary: #1b1f5a;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e7e8f2;
+
+  --accent: #c9a227;
+  --accent-foreground: #1f1b16;
+  --accent-soft: #f7efd6;
+
+  --danger: #8f2c1f;
+  --danger-foreground: #ffffff;
+
+  --ring: #1b1f5a;
+}
+
+[data-theme='dark'] {
+  --background: #16130f;
+  --foreground: #f5f1ea;
+  --card: #1d1a15;
+  --card-foreground: #f5f1ea;
+  --muted: #241f19;
+  --muted-foreground: #b5aa9b;
+  --border: #332c24;
+  --input: #3d3529;
+
+  /* El indigo institucional no alcanza contraste AA sobre fondo oscuro:
+     en oscuro se usa su version clara y el indigo queda como fondo. */
+  --primary: #a9b0e8;
+  --primary-foreground: #10132f;
+  --primary-soft: #22254d;
+
+  --accent: #e3c155;
+  --accent-foreground: #1f1b16;
+  --accent-soft: #3a3117;
+
+  --danger: #f2b3a8;
+  --danger-foreground: #2a0f0a;
+
+  --ring: #a9b0e8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-ring: var(--ring);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+ * Densidad de informacion (regla 3.7). Tres escalones reales, no cosmeticos:
+ * cambian el aire vertical y el alto minimo de los objetivos tactiles.
+ * ------------------------------------------------------------------------ */
+:root {
+  --cian-text-scale: 1;
+  --cian-gap: 0.75rem;
+  --cian-section-gap: 1.5rem;
+  --cian-block-padding: 1rem;
+  --cian-control-height: 2.75rem;
+}
+
+[data-density='compact'] {
+  --cian-gap: 0.5rem;
+  --cian-section-gap: 1rem;
+  --cian-block-padding: 0.75rem;
+  --cian-control-height: 2.5rem;
+}
+
+[data-density='comfortable'] {
+  --cian-gap: 0.75rem;
+  --cian-section-gap: 1.5rem;
+  --cian-block-padding: 1rem;
+  --cian-control-height: 2.75rem;
+}
+
+[data-density='spacious'] {
+  --cian-gap: 1.25rem;
+  --cian-section-gap: 2.5rem;
+  --cian-block-padding: 1.5rem;
+  --cian-control-height: 3.25rem;
+}
+
+@layer base {
+  /*
+   * La escala tipografica se aplica en la raiz y todo el layout usa rem, por
+   * lo que el texto crece junto con sus contenedores en lugar de desbordarlos.
+   */
+  html {
+    font-size: calc(100% * var(--cian-text-scale, 1));
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    min-height: 100dvh;
+    text-wrap: pretty;
+  }
+
+  /* Foco siempre visible, tambien en navegadores que lo ocultan por defecto. */
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--accent-foreground);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Movimiento reducido. Se respeta tanto la preferencia guardada en CIAN como
+ * la del sistema operativo: basta con que una de las dos lo pida.
+ * ------------------------------------------------------------------------ */
+[data-reduced-motion='true'],
+[data-reduced-motion='true'] *,
+[data-reduced-motion='true'] *::before,
+[data-reduced-motion='true'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enlace de salto al contenido: invisible hasta que recibe foco. */
+.cian-skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -100%;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 0.5rem;
+}
+
+.cian-skip-link:focus {
+  top: 0.5rem;
+}
