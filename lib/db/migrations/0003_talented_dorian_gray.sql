@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ALTER COLUMN "id" DROP DEFAULT;

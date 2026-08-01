@@ -1,6 +1,6 @@
 {
-  "id": "a4f83ea8-4be9-4339-acf4-6edc12f8fb66",
-  "prevId": "074ffe5d-fd32-42b4-9bb1-36b07295bfb5",
+  "id": "60c5d235-4aad-4080-9fc2-4ff744e17c8b",
+  "prevId": "a4f83ea8-4be9-4339-acf4-6edc12f8fb66",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -947,8 +947,7 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()::text"
+          "notNull": true
         },
         "tenant_id": {
           "name": "tenant_id",
