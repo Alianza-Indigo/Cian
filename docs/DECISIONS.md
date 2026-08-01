@@ -113,6 +113,44 @@ mostrar nada.
 prohibiciones del PRD descartan dependencias con binarios nativos (`sharp`,
 `canvas`), y la marca es lo bastante simple para dibujarla por píxel.
 
+### Proveedor de IA: Google Gemini 3.1 Flash-Lite
+
+Decisión del responsable, tomada durante la Fase 0 y aplicable a partir de la
+Fase 1. **Sustituye a Anthropic**, que era el proveedor implícito en la lista de
+dependencias autorizadas del PRD (`@ai-sdk/anthropic`).
+
+Sigue respetando la sección 2 del PRD: el stack fija «Vercel AI SDK (`ai`,
+`@ai-sdk/*`)», y `@ai-sdk/google` entra en ese comodín. Lo que cambia es el
+paquete del proveedor y la credencial.
+
+| Concepto | Valor |
+|---|---|
+| Paquete | `@ai-sdk/google` (verificado: v4.0.31) |
+| Modelo | `gemini-3.1-flash-lite` |
+| Variable de entorno | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| Compatibilidad | `@ai-sdk/provider` 4.x con `ai` 7.x; peer `zod ^4.1.8`, el proyecto ya trae `zod ^4.1.12` |
+
+**No** se usa `@ai-sdk/google-vertex`: la autenticación de Vertex AI es por
+cuenta de servicio, más incómoda en funciones serverless que una clave de API
+de Google AI Studio.
+
+Puntos a vigilar cuando llegue la Fase 1, anotados aquí para que no se
+descubran tarde:
+
+- **El orquestador depende de tool calling de varios pasos** (regla 3.2, con
+  `stopWhen: stepCountIs(N)`). Flash-Lite es el escalón más económico de la
+  familia; conviene medir con cuántas tools registradas sigue enrutando bien,
+  porque el número crece en cada fase.
+- **La Fase 7 (crisis) y la Fase 5 (alimentación) tienen barandales duros**
+  verificados con prompts adversariales. Si Flash-Lite no los sostiene, la
+  salida no es cambiar el barandal: es usar un modelo más capaz **solo para esos
+  agentes**. La tabla `model_configs` de la Fase 9 (`tenant_id`, `purpose`,
+  `provider`, `model`) ya está pensada para elegir modelo por propósito, así que
+  la arquitectura lo admite sin rediseño.
+- Flash-Lite expone niveles de razonamiento (mínimo, bajo, medio, alto). El
+  nivel es un parámetro más de `model_configs.params`, no una constante en el
+  código.
+
 ### Pruebas con el ejecutor de Node, sin framework
 
 Node 22 entiende TypeScript y trae `node:test`. `tests/resolve-hooks.mjs` añade
