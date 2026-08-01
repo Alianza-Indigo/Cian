@@ -9,6 +9,7 @@ import { AppShell, type NavItem } from '@/components/shell/app-shell';
 export const dynamic = 'force-dynamic';
 
 const NAV_ITEMS: readonly NavItem[] = [
+  { href: '/documentos', label: 'Documentos', icon: 'documentos' },
   { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
   {
     href: '/configuracion/accesibilidad',

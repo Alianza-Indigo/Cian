@@ -11,10 +11,11 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 1 — Chat y orquestador.** La conversación ya funciona: streaming,
-historial persistente, memoria de la persona usuaria y el orquestador con su
-primer registro de tools. Sin adjuntos, sin voz y sin módulos funcionales: eso
-llega en las fases siguientes.
+**Fase 2 — Documentos.** Cualquier conversación se convierte en un documento
+descargable con la plantilla institucional: PDF, Word, Markdown o texto. Se
+suman a lo de la Fase 1 —conversación con streaming, historial persistente y
+memoria de la persona usuaria—. Sin adjuntos, sin voz y sin módulos
+funcionales: eso llega en las fases siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -60,10 +61,12 @@ app/
   (auth)/login/                pantalla de acceso
   (app)/                       rutas autenticadas, con shell
     chat/[id]/                 una conversación
+    documentos/                biblioteca de documentos
     memorias/                  lo que CIAN recuerda de ti
     configuracion/accesibilidad/
   api/auth/[...nextauth]/
   api/chat/                    el orquestador
+  api/documentos/[id]/         descarga acotada por tenant
 components/
   ui/                          primitivas sobre elementos nativos
   chat/  shell/  brand/  pwa/
@@ -73,6 +76,7 @@ lib/
   db/migrations/
   ai/                          modelo, prompts, tools, recorte de contexto
     tools/                     una carpeta por módulo
+  documents/                   generadores de PDF, DOCX y texto
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación

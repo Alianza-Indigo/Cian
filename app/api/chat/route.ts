@@ -124,7 +124,11 @@ export async function POST(request: Request): Promise<Response> {
     model: chatModel(),
     system: systemPrompt,
     messages: modelMessages,
-    tools: buildTools({ ctx, sourceMessageId: userMessage.id }),
+    tools: buildTools({
+      ctx,
+      sourceMessageId: userMessage.id,
+      conversationId,
+    }),
     stopWhen: stepCountIs(MAX_STEPS),
     onError({ error }) {
       logRawProviderError(error);

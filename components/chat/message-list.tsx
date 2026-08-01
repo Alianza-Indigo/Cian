@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
 import { humanizeChatError } from '@/lib/ai/client-errors';
+import { DocumentCard } from './document-card';
 
 type MessageListProps = {
   messages: UIMessage[];
@@ -21,6 +22,37 @@ function textOf(message: UIMessage): string {
   return message.parts
     .map((part) => (part.type === 'text' ? part.text : ''))
     .join('\n');
+}
+
+type CreatedDocument = { documentId: string; titulo: string };
+
+/**
+ * Documentos creados por el modelo en este mensaje.
+ *
+ * El AI SDK expone cada llamada a tool como una parte `tool-<nombre>`. Se leen
+ * solo las que ya tienen salida: mientras la tool está en curso no hay
+ * identificador que seguir.
+ */
+function documentsOf(message: UIMessage): CreatedDocument[] {
+  const created: CreatedDocument[] = [];
+
+  for (const part of message.parts) {
+    if (part.type !== 'tool-createDocument') continue;
+
+    const output = (part as { state?: string; output?: unknown }).output;
+    if (!output || typeof output !== 'object') continue;
+
+    const candidate = output as Partial<CreatedDocument>;
+    if (typeof candidate.documentId === 'string') {
+      created.push({
+        documentId: candidate.documentId,
+        titulo:
+          typeof candidate.titulo === 'string' ? candidate.titulo : 'Documento',
+      });
+    }
+  }
+
+  return created;
 }
 
 /**
@@ -85,7 +117,10 @@ export function MessageList({
         {messages.map((message) => {
           const isUser = message.role === 'user';
           const text = textOf(message);
-          if (text.length === 0) return null;
+          const documents = documentsOf(message);
+
+          // Un mensaje sin texto ni documentos no aporta nada en pantalla.
+          if (text.length === 0 && documents.length === 0) return null;
 
           return (
             <article
@@ -96,13 +131,21 @@ export function MessageList({
             >
               <div
                 className={cn(
-                  'max-w-[85%] rounded-xl px-4 py-3 text-sm',
+                  'max-w-[85%] rounded-xl text-sm',
                   isUser
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border bg-card text-card-foreground',
+                    ? 'bg-primary px-4 py-3 text-primary-foreground'
+                    : 'border border-border bg-card px-4 py-3 text-card-foreground',
                 )}
               >
-                <MessageText text={text} />
+                {text.length > 0 ? <MessageText text={text} /> : null}
+
+                {documents.map((document) => (
+                  <DocumentCard
+                    key={document.documentId}
+                    documentId={document.documentId}
+                    fallbackTitle={document.titulo}
+                  />
+                ))}
               </div>
             </article>
           );

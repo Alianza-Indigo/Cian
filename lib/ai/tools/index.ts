@@ -12,6 +12,7 @@ import type { Tool } from 'ai';
 import type { TenantContext } from '../../tenant/guard';
 import { buildMemoryTools } from './memory';
 import { buildUserContextTools } from './user-context';
+import { buildDocumentTools } from './documents';
 
 export type ToolRegistry = Record<string, Tool>;
 
@@ -19,11 +20,14 @@ export type ToolContext = {
   ctx: TenantContext;
   /** Mensaje que originó el turno, para poder rastrear de dónde salió una memoria. */
   sourceMessageId: string | null;
+  /** Conversación en curso, para dejar el documento ligado a su origen. */
+  conversationId: string | null;
 };
 
 export function buildTools(toolContext: ToolContext): ToolRegistry {
   return {
     ...buildUserContextTools(toolContext),
     ...buildMemoryTools(toolContext),
+    ...buildDocumentTools(toolContext),
   };
 }

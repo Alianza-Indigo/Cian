@@ -5,6 +5,74 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 2 — Documentos
+
+### Lo que sí quedó verificado en ejecución
+
+A diferencia de las fases anteriores, aquí se pudo probar casi todo sin
+infraestructura, porque la generación es local:
+
+- **Criterio de las 15 páginas, con margen.** 15 páginas en 126 ms, 36 en
+  108 ms y 118 en 349 ms. El techo de la función son 60 s.
+- **Acentos y caracteres del español en PDF.** Se comprobó carácter por
+  carácter que las fuentes estándar tienen glifo para los 29 signos habituales
+  —acentos, ñ, ¿, ¡, comillas angulares, guiones largos, puntos suspensivos—.
+- **El DOCX es un OOXML completo**: firma zip válida y todas las partes
+  requeridas (`[Content_Types].xml`, `word/document.xml`, estilos, encabezado,
+  pie, numeración).
+- **419 pruebas**, build y typecheck limpios.
+
+### Lo que no se pudo verificar
+
+1. **Que los PDF abran bien en iOS, Android y escritorio**, y que los DOCX
+   abran en Word y Google Docs sin advertencias. No hay dispositivos ni Word
+   aquí. La estructura es correcta, pero eso no sustituye abrirlos.
+2. **La subida a Vercel Blob.** Falta `BLOB_READ_WRITE_TOKEN` en este entorno.
+   Sin él, el documento queda en `failed` con un mensaje explícito en vez de
+   fallar en silencio.
+3. **Que el modelo llame a `createDocument`** ante «conviértelo en una carta
+   para la directora». Es el mismo riesgo de enrutamiento anotado para
+   Flash-Lite, ahora con una tool más en el registro.
+
+### Decisiones que conviene no revertir sin leer esto
+
+- **El archivo se guarda con `access: 'private'` y la URL del store no se
+  expone nunca.** La descarga pasa por `/api/documentos/[id]`, que comprueba el
+  tenant contra la base. Servir un redirect a la URL del blob dejaría el enlace
+  suelto en el historial del navegador e incumpliría el criterio de aislamiento
+  entre tenants.
+
+- **El folio es secuencial por tenant y por año** (`AIN-2026-000042`), con
+  índice único y reintento. Un identificador aleatorio habría sido más simple,
+  pero quien recibe un documento institucional espera un folio correlativo.
+
+- **Regenerar no borra el original hasta que la versión nueva está arriba.**
+  Perder un documento por una instrucción mal entendida sería el peor
+  resultado posible.
+
+- **Al regenerar sí se espera el resultado**, a diferencia de la generación
+  desde el chat, que va con `waitUntil`. La diferencia es quién lo pidió: una
+  persona que acaba de pulsar un botón quiere ver el resultado.
+
+### Deuda técnica
+
+- **La tarjeta del chat consulta el estado cada 2 segundos**, hasta 90. No hay
+  notificación en vivo. Cuando la Fase 8 traiga Web Push, conviene revisarlo.
+
+- **El intérprete de contenido es deliberadamente pequeño**: encabezados,
+  viñetas, listas numeradas, casillas, citas y separadores. No cubre tablas ni
+  imágenes. Si un documento las necesita, hay que ampliarlo a conciencia.
+
+- **Un emoji del modelo se descarta en el PDF**, y queda constancia en el log.
+  Es la decisión correcta —un documento sin emoji sirve, uno que no se generó
+  no— pero conviene saber que el PDF puede diferir del texto del chat.
+
+- **`documents.source_content` guarda el contenido del documento**, que puede
+  ser sensible. Está acotado por tenant como todo lo demás, pero es la primera
+  tabla donde vive texto largo de la persona fuera de los mensajes.
+
+---
+
 ## Fase 1 — Chat y orquestador
 
 ### Criterios que no se pudieron verificar en esta sesión

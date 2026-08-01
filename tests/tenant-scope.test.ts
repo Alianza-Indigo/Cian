@@ -67,6 +67,17 @@ import {
   updateMemory,
 } from '../lib/db/repositories/memories';
 import { recordUsage, sumUsageSince } from '../lib/db/repositories/usage';
+import {
+  createDocument,
+  deleteDocument,
+  getDocument,
+  listDocumentJobs,
+  listDocuments,
+  markDocumentFailed,
+  markDocumentReady,
+  renameDocument,
+  startRegeneration,
+} from '../lib/db/repositories/documents';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -182,6 +193,43 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
         recordUsage(ctx as TenantContext, { kind: 'chat', model: 'prueba' }),
     ],
     ['sumUsageSince', (ctx) => sumUsageSince(ctx as TenantContext, new Date(0))],
+
+    // --- Fase 2: documentos ------------------------------------------------
+    [
+      'createDocument',
+      (ctx) =>
+        createDocument(ctx as TenantContext, {
+          type: 'carta',
+          title: 'Carta',
+          format: 'pdf',
+          sourceContent: 'contenido',
+        }),
+    ],
+    ['getDocument', (ctx) => getDocument(ctx as TenantContext, CONV)],
+    ['listDocuments', (ctx) => listDocuments(ctx as TenantContext)],
+    [
+      'markDocumentReady',
+      (ctx) =>
+        markDocumentReady(ctx as TenantContext, CONV, {
+          blobUrl: 'https://ejemplo',
+          blobPathname: 'ruta',
+          sizeBytes: 1,
+        }),
+    ],
+    [
+      'markDocumentFailed',
+      (ctx) => markDocumentFailed(ctx as TenantContext, CONV, 'error'),
+    ],
+    [
+      'renameDocument',
+      (ctx) => renameDocument(ctx as TenantContext, CONV, 'Otro nombre'),
+    ],
+    ['deleteDocument', (ctx) => deleteDocument(ctx as TenantContext, CONV)],
+    [
+      'startRegeneration',
+      (ctx) => startRegeneration(ctx as TenantContext, CONV, 'más breve'),
+    ],
+    ['listDocumentJobs', (ctx) => listDocumentJobs(ctx as TenantContext, CONV)],
   ];
 
 describe('assertTenantContext', () => {
