@@ -20,6 +20,33 @@ function safeInternalPath(value: string | undefined): string {
   return value;
 }
 
+/**
+ * Mensajes por codigo de error de Auth.js.
+ *
+ * Distinguir el problema nuestro del problema de la persona importa: pedirle
+ * que reintente cuando el fallo es de configuracion del servidor la deja
+ * probando una y otra vez algo que no puede funcionar.
+ *
+ * Ninguno de estos textos revela detalle interno (regla 3.6): dicen de quien
+ * es el problema y que sigue, nada mas.
+ */
+const ERROR_MESSAGES: Record<string, string> = {
+  Configuration:
+    'Hay un problema de configuración en CIAN. No es algo que puedas resolver desde aquí y no depende de tu cuenta; ya estamos revisándolo.',
+  AccessDenied:
+    'No pudimos darte acceso con esa cuenta. Si crees que es un error, escríbenos.',
+  Verification:
+    'El enlace de acceso ya venció o se usó antes. Vuelve a intentar desde el principio.',
+  OAuthAccountNotLinked:
+    'Ese correo ya está registrado con otra forma de acceso. Entra con el método que usaste la primera vez.',
+};
+
+const FALLBACK_ERROR_MESSAGE =
+  'No pudimos completar el acceso. Vuelve a intentarlo.';
+
+/** Cuando el fallo es del servidor, reintentar no arregla nada. */
+const SERVER_SIDE_ERRORS = new Set(['Configuration']);
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const destination = safeInternalPath(params.siguiente);
@@ -50,7 +77,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               role="alert"
               className="mt-4 rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm text-foreground"
             >
-              No pudimos completar el acceso. Vuelve a intentarlo.
+              {ERROR_MESSAGES[params.error] ?? FALLBACK_ERROR_MESSAGE}
             </p>
           ) : null}
 
@@ -62,7 +89,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             }}
           >
             <Button type="submit" size="lg" className="w-full">
-              Continuar con Google
+              {params.error && SERVER_SIDE_ERRORS.has(params.error)
+                ? 'Reintentar de todos modos'
+                : 'Continuar con Google'}
             </Button>
           </form>
         </div>
