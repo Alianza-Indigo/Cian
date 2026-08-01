@@ -18,7 +18,7 @@ import {
 import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 import { getTenantContext } from '@/lib/tenant/context';
-import { chatModel, CHAT_MODEL_ID, isModelConfigured } from '@/lib/ai/provider';
+import { chatModel, CHAT_MODEL_ID } from '@/lib/ai/provider';
 import { buildTools } from '@/lib/ai/tools';
 import { getPromptOrFallback, ORCHESTRATOR_FALLBACK } from '@/lib/ai/prompts';
 import { trimToBudget } from '@/lib/ai/context-window';
@@ -72,13 +72,6 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!ctx) {
     return errorResponse('Necesitas iniciar sesión para escribir.', 401);
-  }
-
-  if (!isModelConfigured()) {
-    return errorResponse(
-      'CIAN todavía no tiene configurado su modelo de lenguaje. Es un problema nuestro, no tuyo.',
-      503,
-    );
   }
 
   let payload: z.infer<typeof requestSchema>;
