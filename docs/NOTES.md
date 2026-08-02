@@ -304,6 +304,59 @@ cuentas. La pantalla lo dice.
 
 ---
 
+## Transversal — «Mi perfil» seguía saliendo en todas las cuentas
+
+Dicho así: **«aún queda en todo tipo de cuenta [lo] de que llenen el campo de mi
+perfil»**. Y tenía razón: yo había dado por arreglado algo que no lo estaba.
+
+El arreglo anterior escondía el bloque «Tu consulta» tras «tiene rol de
+profesional **o administra el espacio**». Suena razonable y no servía para nada,
+porque:
+
+> Al entrar por primera vez, **cada persona recibe un espacio personal del que es
+> `owner`**, y `owner` pasa cualquier comprobación de admin.
+
+Es decir: `hasRoleAtLeast(ctx, 'admin')` no significa «lleva una organización»,
+significa «tiene una cuenta». La excepción que escribí pensando en el admin de
+una asociación se aplicaba a todo el mundo, y «Mi perfil» seguía apareciendo en
+la cuenta de una familia que no va a atender a nadie. Exactamente lo que se
+quería quitar.
+
+Es la misma familia de fallos que ya está anotada más abajo, en membresías:
+código que era correcto cuando cada quien estaba solo en su espacio deja de
+serlo en cuanto hay más de una persona o se mira desde fuera. Conviene tenerlo
+presente como regla general: **`owner` no es un rol administrativo, es el estado
+por omisión de cualquiera.** Cualquier cosa escondida detrás de esa comprobación
+no está escondida.
+
+### Cómo queda
+
+`canPractice` ahora es `ctx.role === 'professional' || profile !== null`. Se
+atiende, no se administra. El layout consulta `getMyProfessionalProfile` —una
+consulta más por navegación— porque es la única forma de saberlo sin deducirlo de
+un rol que no lo dice.
+
+Quien administra una organización y además ejerce empieza sin perfil y por tanto
+sin bloque. Lo abre desde **Administración → Profesionales**, donde hay un enlace
+explícito («¿Atiendes tú también?»), y a partir de ahí lo ve siempre. Está ahí y
+no en el menú por la lección de la sesión anterior: agrupar por tarea, no por
+naturaleza técnica. Quien mira esa pantalla ya está pensando en quién atiende.
+
+El layout de `/profesional` sigue admitiendo a quien administra, para que ese
+enlace funcione la primera vez. No es una fuga: cada consulta del repositorio
+resuelve el profesional desde `ctx.userId`, así que sin perfil la agenda sale
+vacía y el expediente de cualquier persona devuelve `null`.
+
+### La prueba
+
+`tests/navigation.test.ts` lee el layout y falla si `canPractice` vuelve a
+depender de una comprobación de admin. Comprobado que atrapa el error volviendo
+a escribir la línea vieja. También comprueba lo contrario —que `isSpaceAdmin` sí
+dependa del rol— porque no todo lo que se esconde tras admin está mal: que quien
+es dueño de su espacio personal vea «Membresía» es correcto, es su suscripción.
+
+---
+
 ## Transversal — El menú lo mezclaba todo
 
 Reportado en uso: «el menú lateral mezcla todo, el perfil para dar de alta a los

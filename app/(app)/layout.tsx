@@ -6,6 +6,7 @@ import {
   listMembershipsForUser,
 } from '@/lib/db/repositories/tenants';
 import { listConversations } from '@/lib/db/repositories/conversations';
+import { getMyProfessionalProfile } from '@/lib/db/repositories/consultorio';
 import { AppShell, type NavGroup } from '@/components/shell/app-shell';
 import { hasRoleAtLeast } from '@/lib/tenant/guard';
 import { isSuperadminEmail } from '@/lib/admin/access';
@@ -80,8 +81,20 @@ function navGroupsFor(options: {
      * escondido dentro de otro: quien atiende ve que tiene una zona suya, y
      * quien no atiende no ve nada que le haga dudar de si le falta algo.
      *
-     * Un admin lo ve porque también puede ejercer: el rol es uno solo, así que
-     * quien lleva un espacio y además es profesional no puede tener los dos.
+     * ## El intento anterior no servía, y conviene saber por qué
+     *
+     * La condición era «tiene rol de profesional **o administra el espacio**».
+     * Suena razonable y estaba mal: al entrar por primera vez, **cada persona
+     * recibe un espacio personal del que es `owner`**, y `owner` pasa cualquier
+     * comprobación de admin. Así que la excepción pensada para quien lleva una
+     * organización se aplicaba a todo el mundo, y «Mi perfil» seguía saliendo en
+     * la cuenta de una familia que no va a atender a nadie —justo lo que se
+     * quería arreglar—.
+     *
+     * Es el mismo tropiezo que ya está anotado en NOTES: un permiso que era
+     * inofensivo cuando cada quien estaba solo en su espacio deja de serlo en
+     * cuanto se mira desde fuera. `owner` no significa «lleva una organización»,
+     * significa «tiene una cuenta».
      */
     ...(options.canPractice
       ? [
@@ -133,10 +146,13 @@ export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [session, ctx] = await Promise.all([auth(), requireTenantContext()]);
-  const [tenant, conversations, memberships] = await Promise.all([
+  const [tenant, conversations, memberships, profile] = await Promise.all([
     getCurrentTenant(ctx),
     listConversations(ctx, { limit: 100 }),
     listMembershipsForUser(ctx.userId),
+    // Una consulta más por navegación, y hace falta: es la única forma de
+    // saber si esta persona ejerce sin deducirlo de un rol que no lo dice.
+    getMyProfessionalProfile(ctx),
   ]);
 
   if (!tenant) {
@@ -149,10 +165,16 @@ export default async function AppLayout({
       userName={session?.user?.name ?? 'Tu cuenta'}
       userEmail={session?.user?.email ?? ''}
       navGroups={navGroupsFor({
-        // El rol es uno solo, así que quien administra el espacio y además
-        // ejerce no puede llevar `professional`. Se le enseña igual.
-        canPractice:
-          ctx.role === 'professional' || hasRoleAtLeast(ctx, 'admin'),
+        /*
+         * Se atiende, no se administra: o te dieron el rol de profesional, o ya
+         * rellenaste tu perfil. Nada de deducirlo del rol de admin, que lo
+         * tiene cualquiera en su propio espacio.
+         *
+         * Quien administra una organización y además ejerce empieza sin perfil
+         * y por tanto sin bloque; lo abre desde «Administración → Profesionales»,
+         * que es donde está pensando en eso, y a partir de ahí lo ve siempre.
+         */
+        canPractice: ctx.role === 'professional' || profile !== null,
         isSpaceAdmin: hasRoleAtLeast(ctx, 'admin'),
       })}
       spaces={memberships.map((membership) => ({

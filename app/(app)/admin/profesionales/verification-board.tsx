@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Mail, UserPlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -114,6 +115,28 @@ export function VerificationBoard({
           Hasta el tercer paso no aparece en el consultorio ni puede recibir
           citas. Registrarse por su cuenta no sirve: eso crea un espacio suyo, no
           le mete en el tuyo.
+        </p>
+
+        {/*
+         * La entrada de quien administra y además atiende.
+         *
+         * Vive aquí y no en el menú lateral a propósito. «Mi perfil» salía antes
+         * en todas las cuentas —incluidas las de familias que no van a atender a
+         * nadie— porque se deducía del rol de admin, y en CIAN cualquiera es
+         * dueño de su propio espacio. Ahora el bloque «Tu consulta» aparece
+         * cuando de verdad ejerces; para abrirlo la primera vez, este enlace,
+         * que está justo donde alguien está pensando en quién atiende.
+         */}
+        <p className="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
+          ¿Atiendes tú también?{' '}
+          <Link
+            href="/profesional/perfil"
+            className="underline underline-offset-4"
+          >
+            Rellena tu perfil profesional
+          </Link>
+          . En cuanto lo guardes te aparece «Tu consulta» en el menú, con tu
+          agenda y tus personas.
         </p>
       </Card>
 
