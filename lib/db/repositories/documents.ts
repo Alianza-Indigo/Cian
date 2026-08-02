@@ -7,6 +7,7 @@ import {
   type DocumentRow,
 } from '../schema/documents';
 import { assertTenantContext, type TenantContext } from '../../tenant/guard';
+import { enforceLimit } from '../../billing/enforce';
 import type { DocumentFormat, DocumentType } from '../../documents/types';
 
 export type CreateDocumentInput = {
@@ -63,6 +64,15 @@ export async function createDocument(
   if (content.length === 0) {
     throw new Error('El documento necesita contenido.');
   }
+
+  /*
+   * El límite de plan se comprueba aquí y no en cada sitio que genera un
+   * documento —la tool, la exportación de educación, el plan posterior de
+   * crisis— porque todos pasan por esta función y ninguno debe poder saltárselo
+   * por olvido. El mensaje ya viene redactado para la persona.
+   */
+  const quota = await enforceLimit(ctx, 'documentos');
+  if (!quota.allowed) throw new Error(quota.message);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const folio = await nextFolio(ctx, attempt);

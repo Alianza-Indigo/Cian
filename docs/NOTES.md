@@ -5,6 +5,114 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 9 — Membresías y panel administrativo
+
+### Stripe por REST, sin SDK
+
+Tercera vez que pasa lo mismo —`web-push`, el SDK de Resend y ahora `stripe`—
+y por la misma razón: la regla de oro del PRD pide proponer cualquier
+dependencia fuera de la lista antes de instalarla. De Stripe se usan tres
+llamadas HTTP y una comprobación de firma; el SDK no aporta nada que `fetch` y
+`node:crypto` no hagan.
+
+**Lo que sí está verificado**, con pruebas: que la firma del webhook solo pasa
+si viene del secreto correcto, con el cuerpo exacto y dentro de la ventana de
+tiempo; que un cuerpo alterado con la firma original se rechaza; que una firma
+auténtica pero vieja se rechaza; que acepta varias firmas `v1` durante una
+rotación de secreto; y que el codificador de formularios anida con corchetes
+como espera Stripe.
+
+**Lo que no**: ningún pago real ha pasado por aquí. Hace falta una cuenta de
+Stripe con productos y precios creados. El flujo completo —contratar, renovar,
+fallar el pago, cancelar— está implementado y sin probar contra el servicio.
+
+### El cuerpo del webhook se lee crudo
+
+`await request.text()` antes de tocar nada. Si se parseara el JSON y se volviera
+a serializar, cambiarían espacios y orden de claves y **todo webhook legítimo se
+rechazaría**. Es el error clásico de esta integración y está anotado en la ruta
+para que nadie lo «arregle».
+
+### Un pago fallido no corta el acceso
+
+`pago_pendiente` sigue dando servicio. Stripe reintenta el cobro durante días, y
+quitarle las herramientas a una familia por una tarjeta vencida sería
+desproporcionado. Está en `grantsAccess` y comprobado en las pruebas.
+
+Por el mismo criterio, un estado de Stripe que no sepamos leer cae en
+`incompleta`, que **no** da acceso: ante lo desconocido, no conceder.
+
+### La aplicación no le pregunta a Stripe
+
+`subscriptions` es un espejo actualizado por webhook, y es lo que se lee para
+decidir si alguien tiene acceso. Consultar la API en cada petición ataría cada
+pantalla a la disponibilidad de un tercero.
+
+El precio es la deriva: si un webhook se pierde, la tabla queda desactualizada.
+Se acepta porque el error cae del lado generoso —alguien conserva acceso que ya
+no paga— y no del que le quita herramientas a quien las usa. **Falta un
+reconciliador periódico** que compare con Stripe; es el pendiente más claro de
+esta fase.
+
+### Lo que nunca se limita
+
+La escalera de derivación de crisis. La ruta de chat comprueba el límite de plan
+**después** de la detección de emergencia y solo cuando no hay señal, igual que
+ya hacía con el límite por minuto. Cobrar por el momento en que alguien pide
+ayuda sería indefendible.
+
+### La biblioteca ya se administra desde la plataforma
+
+Era una petición explícita: no debería hacer falta editar archivos del
+repositorio para publicar contenido. `/admin/biblioteca` crea, edita y retira
+recursos globales, con su indexado y sus embeddings.
+
+**La trampa, y está en la interfaz:** los archivos de `content/library/` se
+siguen indexando en cada despliegue. Un recurso creado en el panel con el mismo
+`slug` que un archivo lo sobrescribe, y el siguiente despliegue lo revierte. La
+pantalla marca qué recursos vienen de archivo. Lo limpio sería migrar los
+archivos a la base y quitar el indexado del build, pero eso es una decisión
+sobre de dónde viene el contenido de arranque y no tocaba tomarla aquí.
+
+### Sin costo estimado en pesos
+
+El PRD lo pide entre las métricas. No está, a propósito: poner una cifra de
+dinero exigiría cablear el precio por millón de tokens de cada modelo, que
+cambia sin avisar y sin que nada en el código se entere. Una cifra
+desactualizada sobre la que se toman decisiones de presupuesto es peor que
+ninguna. Están los tokens por modelo, que es el dato que sí es verdad y con el
+que se puede calcular fuera.
+
+**Es un criterio de aceptación entregado a medias y conviene decidirlo**: o se
+añade una tabla de precios editable desde el panel, o se acepta que el costo se
+calcula fuera.
+
+### Cambiar un modelo tarda hasta cinco minutos
+
+`resolve-model.ts` cachea en KV cinco minutos, igual que los prompts. Guardar
+desde el panel invalida la caché de ese propósito, así que el cambio se ve al
+instante en la instancia que lo guardó; las demás pueden tardar. Aceptable para
+configuración, y la pantalla lo dice.
+
+### Pendientes de esta fase
+
+- **Sin ningún pago real probado.** Cuatro de los seis criterios de aceptación
+  dependen de una cuenta de Stripe configurada.
+- **Sin reconciliador de suscripciones.** Ver arriba.
+- **Membresías de organización con asientos: a medias.** El esquema tiene
+  `seats` y el checkout los cobra, pero **nada comprueba el límite de asientos
+  al añadir a alguien al espacio**, porque no existe todavía una pantalla para
+  añadir miembros a un tenant —las organizaciones con varias personas no tienen
+  interfaz propia—. El límite está definido y sin aplicar.
+- **`plan_limits` no tiene pantalla.** La tabla y la acción existen y están
+  protegidas por rol `owner`; falta el formulario en `/admin`.
+- **El panel no administra otros tenants.** Un superadmin ve datos globales
+  —prompts, biblioteca— pero sigue viendo métricas y auditoría solo de su propio
+  espacio. Administrar usuarios y organizaciones ajenas exigiría un camino que
+  esquive el ámbito de tenant, y no se abrió a la ligera.
+
+---
+
 ## Fase 8 — Equipo de apoyo y recordatorios
 
 ### Web Push escrito a mano, y por qué

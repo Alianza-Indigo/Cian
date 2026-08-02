@@ -196,6 +196,20 @@ import {
   savePushSubscription,
   setReminderActive,
 } from '../lib/db/repositories/notifications';
+import {
+  getSubscription,
+  getUsageMetrics,
+  getUsageSnapshot,
+  listModelConfigs,
+  saveModelConfig,
+  savePlanLimits,
+  deleteModelConfig,
+} from '../lib/db/repositories/billing';
+import {
+  createPromptVersion,
+  listPromptKeys,
+} from '../lib/db/repositories/prompts';
+import { listTenantMembersWithUsers } from '../lib/db/repositories/tenants';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -639,6 +653,36 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
           quietHours: { startHour: 22, endHour: 7 },
           timeZone: 'America/Mexico_City',
         }),
+    ],
+
+    // --- Fase 9: membresías y panel ----------------------------------------
+    ['getSubscription', (ctx) => getSubscription(ctx as TenantContext)],
+    ['getUsageSnapshot', (ctx) => getUsageSnapshot(ctx as TenantContext)],
+    ['getUsageMetrics', (ctx) => getUsageMetrics(ctx as TenantContext)],
+    ['listModelConfigs', (ctx) => listModelConfigs(ctx as TenantContext)],
+    [
+      'saveModelConfig',
+      (ctx) =>
+        saveModelConfig(ctx as TenantContext, {
+          purpose: 'chat',
+          provider: 'google',
+          model: 'gemini-3.1-flash-lite',
+        }),
+    ],
+    ['deleteModelConfig', (ctx) => deleteModelConfig(ctx as TenantContext, CONV)],
+    [
+      'savePlanLimits',
+      (ctx) => savePlanLimits(ctx as TenantContext, 'free', { mensajes: 10 }),
+    ],
+    ['listPromptKeys', (ctx) => listPromptKeys(ctx as TenantContext)],
+    [
+      'createPromptVersion',
+      (ctx) =>
+        createPromptVersion(ctx as TenantContext, 'orchestrator.system', 'Hola'),
+    ],
+    [
+      'listTenantMembersWithUsers',
+      (ctx) => listTenantMembersWithUsers(ctx as TenantContext),
     ],
   ];
 

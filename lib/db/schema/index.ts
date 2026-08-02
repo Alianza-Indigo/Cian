@@ -15,3 +15,4 @@ export * from './library';
 export * from './crisis';
 export * from './team';
 export * from './notifications';
+export * from './billing';

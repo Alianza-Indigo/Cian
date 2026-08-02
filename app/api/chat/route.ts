@@ -20,11 +20,13 @@ import {
 import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 import { getTenantContext } from '@/lib/tenant/context';
-import { chatModel, CHAT_MODEL_ID } from '@/lib/ai/provider';
+import { chatModel } from '@/lib/ai/provider';
+import { resolveModelId } from '@/lib/ai/resolve-model';
 import { buildTools } from '@/lib/ai/tools';
 import { getPromptOrFallback, ORCHESTRATOR_FALLBACK } from '@/lib/ai/prompts';
 import { trimToBudget } from '@/lib/ai/context-window';
 import { checkChatRateLimit } from '@/lib/ai/rate-limit';
+import { enforceLimit } from '@/lib/billing/enforce';
 import { generateConversationTitle } from '@/lib/ai/title';
 import { logRawProviderError, toUserFacingError } from '@/lib/ai/errors';
 import {
@@ -111,13 +113,24 @@ export async function POST(request: Request): Promise<Response> {
    */
   const emergencySignals = detectEmergencySignals(textOf(incoming));
 
-  // El límite se comprueba antes de gastar un solo token.
+  /*
+   * Los dos límites se comprueban antes de gastar un solo token, y los dos se
+   * saltan cuando hay una señal de emergencia. El de plan por la misma razón
+   * que el de ritmo: quien está viviendo una emergencia no puede toparse con
+   * «alcanzaste el límite de tu plan».
+   */
   if (emergencySignals.length === 0) {
     const limit = await checkChatRateLimit(ctx.tenantId, ctx.userId);
     if (!limit.allowed) {
       return errorResponse(limit.message, 429, {
         'Retry-After': String(limit.retryAfterSeconds),
       });
+    }
+
+    // 402 y no 429: no es «espera un momento», es «este plan llegó a su tope».
+    const quota = await enforceLimit(ctx, 'mensajes');
+    if (!quota.allowed) {
+      return errorResponse(quota.message, 402);
     }
   }
 
@@ -201,6 +214,10 @@ export async function POST(request: Request): Promise<Response> {
     ORCHESTRATOR_FALLBACK,
   );
 
+  // El modelo sale de `model_configs` con la caché de KV delante; si no hay
+  // configuración, cae al del entorno.
+  const modelId = await resolveModelId(ctx.tenantId, 'chat');
+
   const history = trimToBudget(payload.messages);
 
   /*
@@ -212,7 +229,7 @@ export async function POST(request: Request): Promise<Response> {
   const modelMessages = await convertToModelMessages(withAttachments);
 
   const result = streamText({
-    model: chatModel(),
+    model: chatModel(modelId),
     system: systemPrompt,
     messages: modelMessages,
     tools: buildTools({
@@ -233,7 +250,7 @@ export async function POST(request: Request): Promise<Response> {
               touchConversation(ctx, conversationId),
               recordUsage(ctx, {
                 kind: 'chat',
-                model: CHAT_MODEL_ID,
+                model: modelId,
                 tokensIn: usage.inputTokens ?? 0,
                 tokensOut: usage.outputTokens ?? 0,
               }),
@@ -272,7 +289,7 @@ export async function POST(request: Request): Promise<Response> {
           conversationId,
           role: 'assistant',
           parts: responseMessage.parts as MessagePart[],
-          model: CHAT_MODEL_ID,
+          model: modelId,
         });
       } catch {
         // Si falla el guardado, la persona ya vio la respuesta; se pierde del

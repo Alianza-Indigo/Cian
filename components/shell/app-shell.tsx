@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Brain,
   BookOpen,
+  CreditCard,
   CheckSquare,
   GraduationCap,
   FileText,
@@ -15,6 +16,7 @@ import {
   Menu,
   Plus,
   Settings,
+  ShieldCheck,
   Share2,
   Sparkles,
   Target,
@@ -48,6 +50,8 @@ export type NavItem = {
     | 'equipo'
     | 'compartido'
     | 'avisos'
+    | 'membresia'
+    | 'admin'
     | 'configuracion';
 };
 
@@ -66,6 +70,8 @@ const ICONS = {
   compartido: Share2,
   avisos: Bell,
   configuracion: Settings,
+  membresia: CreditCard,
+  admin: ShieldCheck,
 } as const;
 
 type AppShellProps = {

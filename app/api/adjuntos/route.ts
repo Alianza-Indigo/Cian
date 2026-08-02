@@ -11,6 +11,7 @@
  */
 import { put } from '@vercel/blob';
 import { getTenantContext } from '@/lib/tenant/context';
+import { enforceLimit } from '@/lib/billing/enforce';
 import { createAttachment } from '@/lib/db/repositories/attachments';
 import { extractText } from '@/lib/attachments/extract';
 import {
@@ -92,6 +93,16 @@ export async function POST(request: Request): Promise<Response> {
     );
     if (!revalidated.ok) {
       return jsonError(revalidated.error, 415);
+    }
+
+    /*
+     * El almacenamiento se comprueba con el tamaño real del archivo, ya leído,
+     * y antes de subirlo al store: rechazarlo después dejaría el blob huérfano
+     * ocupando espacio que la persona no puede ver ni borrar.
+     */
+    const quota = await enforceLimit(ctx, 'almacenamiento', bytes.byteLength);
+    if (!quota.allowed) {
+      return jsonError(quota.message, 402);
     }
 
     const extractedText = extractText(validation.mimeType, bytes);

@@ -61,12 +61,19 @@ function googleProvider() {
   return createGoogle({ apiKey });
 }
 
-export function chatModel() {
-  return googleProvider()(CHAT_MODEL_ID);
+/**
+ * El modelo de conversación.
+ *
+ * Acepta un identificador explícito desde la Fase 9: `lib/ai/resolve-model.ts`
+ * lo saca de `model_configs` y lo pasa aquí. Sin argumento se usa el del
+ * entorno, que es lo que hacen las rutas que todavía no resuelven por tenant.
+ */
+export function chatModel(modelId: string = CHAT_MODEL_ID) {
+  return googleProvider()(modelId);
 }
 
-export function utilityModel() {
-  return googleProvider()(UTILITY_MODEL_ID);
+export function utilityModel(modelId: string = UTILITY_MODEL_ID) {
+  return googleProvider()(modelId);
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 } from '../db/repositories/team';
 import { recordAudit } from '../db/repositories/audit';
 import { invitationEmail, sendEmail } from '../notifications/email';
+import { enforceLimit } from '../billing/enforce';
 import { RELATIONSHIPS, SHAREABLE_TYPES, SHARE_PERMISSIONS } from './types';
 
 export type TeamActionResult =
@@ -61,6 +62,11 @@ export async function inviteMemberAction(
 
   try {
     const [ctx, session] = await Promise.all([requireTenantContext(), auth()]);
+
+    // El límite es de personas en el equipo, no de invitaciones enviadas:
+    // reinvitar a alguien que ya está no debe contar como una plaza nueva.
+    const quota = await enforceLimit(ctx, 'equipo_de_apoyo');
+    if (!quota.allowed) return { ok: false, error: quota.message };
 
     const { member, token } = await inviteMember(ctx, parsed.data);
     const inviteUrl = `${await baseUrl()}/invitacion/${token}`;

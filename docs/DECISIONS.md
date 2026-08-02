@@ -5,6 +5,43 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ---
 
+## 2026-08-02 — Fase 9
+
+### El plan gratuito es un plan, no una demostración
+
+Los límites del plan gratuito se fijaron generosos a propósito, y hay una prueba
+que lo defiende (`el plan gratuito es utilizable, no una demostración`). El PRD
+pide «que nadie quede fuera por costo»; un límite que se agota la primera semana
+incumple eso aunque técnicamente exista un plan sin pagar.
+
+Lo que se limita es el costo variable —mensajes al modelo, documentos,
+almacenamiento— y nunca la seguridad. El acompañamiento en crisis no consume
+cuota y no se bloquea en ningún plan.
+
+### El superadmin vive en el entorno, no en la base
+
+Podría ser una columna en `users`. Se descartó: una fila que concede poder sobre
+toda la plataforma es una fila que alguien puede escribir desde una inyección,
+un `UPDATE` mal hecho o un volcado restaurado. Una variable de entorno solo la
+cambia quien tiene acceso al proyecto en Vercel.
+
+### El historial de prompts es inmutable
+
+Guardar crea una versión nueva y la activa; nunca modifica una existente. Es lo
+que hace posible el rollback que pide el PRD, y también lo que permite responder
+«¿qué decía el asistente en marzo?». Editar en sitio dejaría un historial que
+miente.
+
+### Los repositorios siguen siendo la garantía, no el panel
+
+El criterio «un admin de tenant no puede ver datos de otro tenant» se cumple
+porque cada función filtra por `ctx.tenantId`, no porque el panel esté
+protegido. El layout de `/admin` hace `notFound()` por cortesía —y para no
+confirmar que el panel existe—, pero una server action invocada directamente se
+topa con `assertRoleAtLeast` en el repositorio, que es donde tiene que estar.
+
+---
+
 ## 2026-08-02 — Fase 8
 
 ### Pertenecer al equipo no da acceso a nada

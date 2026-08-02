@@ -4,6 +4,8 @@ import { requireTenantContext } from '@/lib/tenant/context';
 import { getCurrentTenant } from '@/lib/db/repositories/tenants';
 import { listConversations } from '@/lib/db/repositories/conversations';
 import { AppShell, type NavItem } from '@/components/shell/app-shell';
+import { hasRoleAtLeast } from '@/lib/tenant/guard';
+import { isSuperadminEmail } from '@/lib/admin/access';
 
 // Toda ruta autenticada es dinámica: depende de sesión y de tenant.
 export const dynamic = 'force-dynamic';
@@ -22,6 +24,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: '/compartido', label: 'Compartido conmigo', icon: 'compartido' },
   { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
   { href: '/configuracion/avisos', label: 'Avisos', icon: 'avisos' },
+  { href: '/membresia', label: 'Membresía', icon: 'membresia' },
   {
     href: '/configuracion/accesibilidad',
     label: 'Accesibilidad',
@@ -47,7 +50,17 @@ export default async function AppLayout({
       tenantName={tenant.name}
       userName={session?.user?.name ?? 'Tu cuenta'}
       userEmail={session?.user?.email ?? ''}
-      navItems={NAV_ITEMS}
+      navItems={
+        // El panel solo aparece para quien puede entrar. No es la protección
+        // —esa está en el layout de /admin y en cada acción— sino cortesía:
+        // un enlace que lleva a un 404 no le sirve a nadie.
+        hasRoleAtLeast(ctx, 'admin') || isSuperadminEmail(session?.user?.email)
+          ? [
+              ...NAV_ITEMS,
+              { href: '/admin', label: 'Administración', icon: 'admin' as const },
+            ]
+          : NAV_ITEMS
+      }
       conversations={conversations.map((conversation) => ({
         id: conversation.id,
         title: conversation.title,

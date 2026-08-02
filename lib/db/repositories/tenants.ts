@@ -6,6 +6,7 @@ import {
   type TenantRow,
   type MemberRole,
 } from '../schema/tenants';
+import { users } from '../schema/auth';
 import {
   assertRoleAtLeast,
   assertTenantContext,
@@ -115,4 +116,42 @@ export async function renameTenant(
   }
 
   return row;
+}
+
+/**
+ * Los miembros del espacio con su nombre y correo, para el panel.
+ *
+ * `listTenantMembers` devuelve solo la fila de membresía porque el resto del
+ * sistema no necesita saber quién es quién. El panel sí: una lista de
+ * identificadores no le sirve a nadie para administrar un equipo.
+ */
+export async function listTenantMembersWithUsers(
+  ctx: TenantContext,
+): Promise<
+  Array<{
+    userId: string;
+    name: string | null;
+    email: string | null;
+    role: MemberRole;
+    status: string;
+    createdAt: Date;
+  }>
+> {
+  assertRoleAtLeast(ctx, 'admin', 'listTenantMembersWithUsers');
+
+  const rows = await db
+    .select({
+      userId: tenantMembers.userId,
+      name: users.name,
+      email: users.email,
+      role: tenantMembers.role,
+      status: tenantMembers.status,
+      createdAt: tenantMembers.createdAt,
+    })
+    .from(tenantMembers)
+    .innerJoin(users, eq(users.id, tenantMembers.userId))
+    .where(eq(tenantMembers.tenantId, ctx.tenantId))
+    .orderBy(tenantMembers.createdAt);
+
+  return rows;
 }
