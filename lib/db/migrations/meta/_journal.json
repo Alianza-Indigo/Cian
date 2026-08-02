@@ -43,6 +43,13 @@
       "when": 1785629280110,
       "tag": "0005_naive_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785630978889,
+      "tag": "0006_medical_whistler",
+      "breakpoints": true
     }
   ]
 }

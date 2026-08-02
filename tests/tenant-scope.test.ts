@@ -105,6 +105,15 @@ import {
   updateRoutine,
   updateRoutineStep,
 } from '../lib/db/repositories/routines';
+import {
+  attachToMessage,
+  createAttachment,
+  deleteAttachment,
+  getAttachment,
+  getAttachments,
+  listAttachmentsForMessages,
+  listOrphanAttachments,
+} from '../lib/db/repositories/attachments';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -324,6 +333,35 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
         logRoutineCompletion(ctx as TenantContext, CONV, { completedStepIds: [] }),
     ],
     ['listRoutineLogs', (ctx) => listRoutineLogs(ctx as TenantContext, CONV)],
+
+    // --- Fase 4: adjuntos ---------------------------------------------------
+    [
+      'createAttachment',
+      (ctx) =>
+        createAttachment(ctx as TenantContext, {
+          kind: 'image',
+          filename: 'foto.png',
+          mime: 'image/png',
+          sizeBytes: 10,
+          blobUrl: 'https://ejemplo',
+          blobPathname: 'ruta',
+        }),
+    ],
+    ['getAttachment', (ctx) => getAttachment(ctx as TenantContext, CONV)],
+    ['getAttachments', (ctx) => getAttachments(ctx as TenantContext, [CONV])],
+    [
+      'attachToMessage',
+      (ctx) => attachToMessage(ctx as TenantContext, MSG, [CONV]),
+    ],
+    [
+      'listAttachmentsForMessages',
+      (ctx) => listAttachmentsForMessages(ctx as TenantContext, [MSG]),
+    ],
+    ['deleteAttachment', (ctx) => deleteAttachment(ctx as TenantContext, CONV)],
+    [
+      'listOrphanAttachments',
+      (ctx) => listOrphanAttachments(ctx as TenantContext, new Date(0)),
+    ],
   ];
 
 describe('assertTenantContext', () => {

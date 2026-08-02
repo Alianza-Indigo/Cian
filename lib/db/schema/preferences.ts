@@ -24,6 +24,7 @@ import { users } from './auth';
 import {
   DENSITIES,
   DETAIL_LEVELS,
+  SPEECH_RATE_DEFAULT,
   TEXT_SCALE_DEFAULT,
   THEMES,
 } from '../../preferences/types';
@@ -51,6 +52,7 @@ export const userPreferences = pgTable(
     reducedMotion: boolean('reduced_motion').notNull().default(false),
     theme: themeEnum('theme').notNull().default('system'),
     detailLevel: detailLevelEnum('detail_level').notNull().default('balanced'),
+    speechRate: integer('speech_rate').notNull().default(SPEECH_RATE_DEFAULT),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),

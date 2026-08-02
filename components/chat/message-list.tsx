@@ -8,12 +8,16 @@ import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
 import { humanizeChatError } from '@/lib/ai/client-errors';
 import { DocumentCard } from './document-card';
+import { MessageAttachments } from './message-attachments';
+import { ReadAloud } from './read-aloud';
 
 type MessageListProps = {
   messages: UIMessage[];
   status: ChatStatus;
   error: Error | undefined;
   canEdit: boolean;
+  /** Velocidad de lectura por voz, de las preferencias de la persona. */
+  speechRate: number;
   onRetry: () => void;
   onEdit: () => void;
 };
@@ -86,6 +90,7 @@ export function MessageList({
   status,
   error,
   canEdit,
+  speechRate,
   onRetry,
   onEdit,
 }: MessageListProps) {
@@ -118,9 +123,12 @@ export function MessageList({
           const isUser = message.role === 'user';
           const text = textOf(message);
           const documents = documentsOf(message);
+          const hasFiles = message.parts.some((part) => part.type === 'file');
 
-          // Un mensaje sin texto ni documentos no aporta nada en pantalla.
-          if (text.length === 0 && documents.length === 0) return null;
+          // Un mensaje sin texto, ni documentos, ni archivos no aporta nada.
+          if (text.length === 0 && documents.length === 0 && !hasFiles) {
+            return null;
+          }
 
           return (
             <article
@@ -137,7 +145,17 @@ export function MessageList({
                     : 'border border-border bg-card px-4 py-3 text-card-foreground',
                 )}
               >
+                <MessageAttachments message={message} />
+
                 {text.length > 0 ? <MessageText text={text} /> : null}
+
+                {!isUser && text.length > 0 ? (
+                  <ReadAloud
+                    text={text}
+                    rate={speechRate / 100}
+                    label="esta respuesta"
+                  />
+                ) : null}
 
                 {documents.map((document) => (
                   <DocumentCard

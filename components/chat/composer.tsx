@@ -3,9 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Square, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AttachmentPicker } from './attachment-picker';
+import { VoiceInput } from './voice-input';
+import {
+  discardAttachment,
+  uploadAttachments,
+  type UploadedAttachment,
+} from '@/lib/attachments/client';
+import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments/types';
 
 type ComposerProps = {
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, attachments: UploadedAttachment[]) => void;
   onCancelEdit: () => void;
   onStop: () => void;
   busy: boolean;
@@ -21,6 +29,9 @@ export function Composer({
   editingText,
 }: ComposerProps) {
   const [value, setValue] = useState('');
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Al entrar en modo edición, el texto anterior queda listo para corregir.
@@ -42,12 +53,42 @@ export function Composer({
     field.style.height = `${Math.min(field.scrollHeight, 240)}px`;
   }, [value]);
 
+  async function addFiles(files: File[]) {
+    const room = MAX_ATTACHMENTS_PER_MESSAGE - attachments.length;
+    if (room <= 0) return;
+
+    setUploading(true);
+    setUploadError('');
+
+    const result = await uploadAttachments(files.slice(0, room));
+
+    if (result.ok) {
+      setAttachments((current) => [...current, ...result.attachments]);
+    } else {
+      setUploadError(result.error);
+    }
+
+    setUploading(false);
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => current.filter((item) => item.id !== id));
+    void discardAttachment(id);
+  }
+
   function submit() {
     const trimmed = value.trim();
-    if (trimmed.length === 0 || busy) return;
-    onSubmit(trimmed);
+    // Un mensaje puede ser solo un archivo: una foto del cuaderno basta.
+    if ((trimmed.length === 0 && attachments.length === 0) || busy) return;
+
+    onSubmit(trimmed, attachments);
     setValue('');
+    setAttachments([]);
+    setUploadError('');
   }
+
+  const canSend =
+    !uploading && (value.trim().length > 0 || attachments.length > 0);
 
   return (
     <form
@@ -75,47 +116,74 @@ export function Composer({
         </div>
       ) : null}
 
-      <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
-        <label htmlFor="mensaje" className="sr-only">
-          Escribe tu mensaje
-        </label>
-        <textarea
-          id="mensaje"
-          ref={textareaRef}
-          value={value}
-          rows={1}
-          onChange={(event) => setValue(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            // Enter envía; Mayús+Enter hace salto de línea. Es lo que la
-            // mayoría espera, y el botón sigue ahí para quien prefiera el ratón.
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-          placeholder="Escribe lo que necesites…"
-          className="max-h-60 min-h-11 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
-        />
+      <div className="rounded-xl border border-border bg-card p-2">
+        <div className="flex items-end gap-2">
+          <label htmlFor="mensaje" className="sr-only">
+            Escribe tu mensaje
+          </label>
+          <textarea
+            id="mensaje"
+            ref={textareaRef}
+            value={value}
+            rows={1}
+            onChange={(event) => setValue(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Enter envía; Mayús+Enter hace salto de línea.
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Escribe lo que necesites…"
+            className="max-h-60 min-h-11 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+          />
 
-        {busy ? (
-          <Button type="button" variant="outline" size="icon" onClick={onStop} aria-label="Detener respuesta">
-            <Square aria-hidden="true" />
-          </Button>
-        ) : (
-          <Button
-            type="submit"
-            size="icon"
-            aria-label="Enviar mensaje"
-            disabled={value.trim().length === 0}
-          >
-            <Send aria-hidden="true" />
-          </Button>
-        )}
+          {busy ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={onStop}
+              aria-label="Detener respuesta"
+            >
+              <Square aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              aria-label="Enviar mensaje"
+              disabled={!canSend}
+            >
+              <Send aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-2 border-t border-border pt-2">
+          <AttachmentPicker
+            attachments={attachments}
+            onFilesChosen={(files) => void addFiles(files)}
+            onRemove={removeAttachment}
+            uploading={uploading}
+            error={uploadError}
+            disabled={busy}
+          />
+        </div>
       </div>
 
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        CIAN no sustituye atención profesional y no es un servicio de emergencia.
-      </p>
+      <div className="mt-2 flex items-center gap-2">
+        <VoiceInput
+          disabled={busy}
+          onTranscript={(text) =>
+            setValue((current) => (current ? `${current} ${text}` : text))
+          }
+          onRecording={(file) => void addFiles([file])}
+        />
+        <p className="flex-1 text-center text-xs text-muted-foreground">
+          CIAN no sustituye atención profesional y no es un servicio de emergencia.
+        </p>
+      </div>
     </form>
   );
 }

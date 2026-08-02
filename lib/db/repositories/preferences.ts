@@ -3,6 +3,7 @@ import { db } from '../client';
 import { userPreferences, type UserPreferencesRow } from '../schema/preferences';
 import {
   DEFAULT_PREFERENCES,
+  clampSpeechRate,
   clampTextScale,
   type EffectivePreferences,
   type PreferencesPatch,
@@ -46,6 +47,7 @@ export async function getEffectivePreferences(
     reducedMotion: row.reducedMotion,
     theme: row.theme,
     detailLevel: row.detailLevel,
+    speechRate: row.speechRate,
   };
 }
 
@@ -65,6 +67,9 @@ export async function upsertPreferences(
     ...(patch.textScale === undefined
       ? {}
       : { textScale: clampTextScale(patch.textScale) }),
+    ...(patch.speechRate === undefined
+      ? {}
+      : { speechRate: clampSpeechRate(patch.speechRate) }),
   };
 
   const [row] = await db

@@ -6,12 +6,15 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { MessageList } from './message-list';
 import { Composer } from './composer';
+import type { UploadedAttachment } from '@/lib/attachments/client';
 
 type ChatProps = {
   conversationId: string;
   initialMessages: UIMessage[];
   /** Verdadero cuando la conversación aún no existe en la base. */
   isNew: boolean;
+  /** Velocidad de lectura por voz configurada por la persona. */
+  speechRate: number;
 };
 
 /** Texto plano de un mensaje, para reeditarlo o reintentarlo. */
@@ -22,7 +25,12 @@ function textOf(message: UIMessage): string {
     .trim();
 }
 
-export function Chat({ conversationId, initialMessages, isNew }: ChatProps) {
+export function Chat({
+  conversationId,
+  initialMessages,
+  isNew,
+  speechRate,
+}: ChatProps) {
   const router = useRouter();
   const [editingText, setEditingText] = useState<string | null>(null);
   const urlSynced = useRef(!isNew);
@@ -68,14 +76,35 @@ export function Chat({ conversationId, initialMessages, isNew }: ChatProps) {
   }, [status, messages.length, router]);
 
   const submit = useCallback(
-    (text: string) => {
+    (text: string, attachments: UploadedAttachment[]) => {
       const trimmed = text.trim();
-      if (trimmed.length === 0 || busy) return;
+      if ((trimmed.length === 0 && attachments.length === 0) || busy) return;
 
       clearError();
       regenerateFrom.current = null;
       setEditingText(null);
-      void sendMessage({ text: trimmed });
+
+      // Las partes de archivo apuntan a nuestra ruta privada; el servidor las
+      // sustituye por el contenido real antes de llamar al modelo.
+      const fileParts = attachments.map((attachment) => ({
+        type: 'file' as const,
+        mediaType: attachment.mediaType,
+        filename: attachment.filename,
+        url: attachment.url,
+      }));
+
+      if (fileParts.length === 0) {
+        void sendMessage({ text: trimmed });
+        return;
+      }
+
+      void sendMessage({
+        role: 'user',
+        parts: [
+          ...fileParts,
+          ...(trimmed.length > 0 ? [{ type: 'text' as const, text: trimmed }] : []),
+        ],
+      });
     },
     [busy, clearError, sendMessage],
   );
@@ -120,6 +149,13 @@ export function Chat({ conversationId, initialMessages, isNew }: ChatProps) {
     [lastUserMessage, resendFrom],
   );
 
+  // Al editar no se vuelven a mandar adjuntos: el mensaje original conserva
+  // los suyos y reenviarlos duplicaría los archivos.
+  const handleEditWithAttachments = useCallback(
+    (text: string) => handleEditSubmit(text),
+    [handleEditSubmit],
+  );
+
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] flex-col">
       <MessageList
@@ -127,12 +163,13 @@ export function Chat({ conversationId, initialMessages, isNew }: ChatProps) {
         status={status}
         error={error}
         canEdit={Boolean(lastUserMessage) && !busy}
+        speechRate={speechRate}
         onRetry={handleRetry}
         onEdit={handleEdit}
       />
 
       <Composer
-        onSubmit={editingText === null ? submit : handleEditSubmit}
+        onSubmit={editingText === null ? submit : handleEditWithAttachments}
         onCancelEdit={() => setEditingText(null)}
         onStop={stop}
         busy={busy}

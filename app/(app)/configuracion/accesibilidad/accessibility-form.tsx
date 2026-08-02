@@ -16,6 +16,7 @@ import {
   THEMES,
   THEME_LABELS,
   TEXT_SCALE_STEPS,
+  SPEECH_RATE_STEPS,
 } from '@/lib/preferences/presentation';
 
 const DENSITY_OPTIONS = DENSITIES.map((value) => ({
@@ -47,6 +48,19 @@ const TEXT_SCALE_OPTIONS = TEXT_SCALE_STEPS.map((step) => ({
   value: String(step),
   label: TEXT_SCALE_LABELS[step] ?? `${step}%`,
   hint: `${step}%`,
+}));
+
+const SPEECH_RATE_LABELS: Record<number, string> = {
+  70: 'Muy pausada',
+  85: 'Pausada',
+  100: 'Normal',
+  125: 'Rápida',
+  150: 'Muy rápida',
+};
+
+const SPEECH_RATE_OPTIONS = SPEECH_RATE_STEPS.map((step) => ({
+  value: String(step),
+  label: SPEECH_RATE_LABELS[step] ?? `${step}%`,
 }));
 
 type Status = { kind: 'idle' } | { kind: 'saved' } | { kind: 'error'; message: string };
@@ -204,6 +218,23 @@ export function AccessibilityForm({
           hint="Quita las transiciones de la interfaz."
           checked={preferences.reducedMotion}
           onChange={(reducedMotion) => update({ reducedMotion })}
+        />
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Velocidad de la lectura por voz</CardTitle>
+          <CardDescription>
+            Cuando pidas que CIAN te lea una respuesta en voz alta, la leerá a
+            esta velocidad. Puedes pausarla o detenerla en cualquier momento.
+          </CardDescription>
+        </CardHeader>
+        <OptionGroup
+          legend="Velocidad de la voz"
+          name="speechRate"
+          value={String(preferences.speechRate)}
+          options={SPEECH_RATE_OPTIONS}
+          onChange={(value) => update({ speechRate: Number(value) })}
         />
       </Card>
 

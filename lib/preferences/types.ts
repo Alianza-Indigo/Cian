@@ -25,6 +25,15 @@ export const TEXT_SCALE_DEFAULT = 100;
 
 export const TEXT_SCALE_STEPS = [85, 100, 115, 130, 150] as const;
 
+/**
+ * Velocidad de la lectura por voz, en porcentaje. La sintesis del navegador
+ * acepta de 0.5 a 2; se guarda como entero para no arrastrar decimales.
+ */
+export const SPEECH_RATE_MIN = 50;
+export const SPEECH_RATE_MAX = 200;
+export const SPEECH_RATE_DEFAULT = 100;
+export const SPEECH_RATE_STEPS = [70, 85, 100, 125, 150] as const;
+
 /** Las preferencias que gobiernan la presentacion, todas resueltas. */
 export type EffectivePreferences = {
   density: Density;
@@ -32,6 +41,7 @@ export type EffectivePreferences = {
   reducedMotion: boolean;
   theme: ThemePreference;
   detailLevel: DetailLevel;
+  speechRate: number;
 };
 
 export type PreferencesPatch = Partial<EffectivePreferences>;
@@ -43,9 +53,15 @@ export const DEFAULT_PREFERENCES: EffectivePreferences = {
   reducedMotion: false,
   theme: 'system',
   detailLevel: 'balanced',
+  speechRate: SPEECH_RATE_DEFAULT,
 };
 
 export function clampTextScale(value: number): number {
   if (!Number.isFinite(value)) return TEXT_SCALE_DEFAULT;
   return Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, Math.round(value)));
+}
+
+export function clampSpeechRate(value: number): number {
+  if (!Number.isFinite(value)) return SPEECH_RATE_DEFAULT;
+  return Math.min(SPEECH_RATE_MAX, Math.max(SPEECH_RATE_MIN, Math.round(value)));
 }

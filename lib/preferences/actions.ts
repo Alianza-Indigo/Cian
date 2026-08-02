@@ -19,6 +19,7 @@ import {
   TEXT_SCALE_MIN,
   serializePreferencesCookie,
 } from './presentation';
+import { SPEECH_RATE_MAX, SPEECH_RATE_MIN } from './types';
 
 const preferencesSchema = z.object({
   density: z.enum(DENSITIES).optional(),
@@ -26,6 +27,12 @@ const preferencesSchema = z.object({
   reducedMotion: z.boolean().optional(),
   theme: z.enum(THEMES).optional(),
   detailLevel: z.enum(DETAIL_LEVELS).optional(),
+  speechRate: z
+    .number()
+    .int()
+    .min(SPEECH_RATE_MIN)
+    .max(SPEECH_RATE_MAX)
+    .optional(),
 });
 
 export type SavePreferencesInput = z.infer<typeof preferencesSchema>;
@@ -75,6 +82,7 @@ export async function savePreferences(
         textScale: preferences.textScale,
         reducedMotion: preferences.reducedMotion,
         detailLevel: preferences.detailLevel,
+        speechRate: preferences.speechRate,
       },
     });
 

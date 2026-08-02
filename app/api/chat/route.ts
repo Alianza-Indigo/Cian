@@ -31,6 +31,11 @@ import {
   touchConversation,
 } from '@/lib/db/repositories/conversations';
 import { appendMessage, deleteFromMessage } from '@/lib/db/repositories/messages';
+import { attachToMessage } from '@/lib/db/repositories/attachments';
+import {
+  collectAttachmentIds,
+  resolveAttachments,
+} from '@/lib/attachments/resolve';
 import { recordUsage } from '@/lib/db/repositories/usage';
 import type { MessagePart } from '@/lib/db/schema/chat';
 
@@ -112,13 +117,27 @@ export async function POST(request: Request): Promise<Response> {
     parts: incoming.parts as MessagePart[],
   });
 
+  // Los adjuntos se subieron antes de escribir; ahora quedan ligados a su
+  // mensaje, que es lo que hace que sobrevivan al recargar la conversación.
+  const attachmentIds = collectAttachmentIds([incoming]);
+  if (attachmentIds.length > 0) {
+    await attachToMessage(ctx, userMessage.id, attachmentIds);
+  }
+
   const systemPrompt = await getPromptOrFallback(
     'orchestrator.system',
     ORCHESTRATOR_FALLBACK,
   );
 
   const history = trimToBudget(payload.messages);
-  const modelMessages = await convertToModelMessages(history);
+
+  /*
+   * Las partes de archivo apuntan a nuestra ruta privada, que el modelo no
+   * puede descargar. Aquí se sustituyen por el contenido real: base64 para lo
+   * que Gemini lee de forma nativa, texto extraído para Word y texto plano.
+   */
+  const withAttachments = await resolveAttachments(ctx, history);
+  const modelMessages = await convertToModelMessages(withAttachments);
 
   const result = streamText({
     model: chatModel(),

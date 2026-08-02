@@ -11,11 +11,11 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 3 — Planes y rutinas.** Los dos módulos estructurales a los que se
-conecta todo lo demás: planes de apoyo con objetivos, estrategias y
-seguimiento, y rutinas con secuencia visual paso a paso. Se suman a la
-conversación de la Fase 1 y a los documentos de la Fase 2. Sin adjuntos, sin
-voz y sin recordatorios: eso llega en las fases siguientes.
+**Fase 4 — Adjuntos y voz.** Entrada y salida multimodal: se pueden adjuntar
+documentos, imágenes y audio a la conversación, dictar por voz y escuchar las
+respuestas. Se suma a la conversación de la Fase 1, los documentos de la Fase 2
+y los planes y rutinas de la Fase 3. Sin recordatorios ni videollamada: eso
+llega en las fases siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -69,6 +69,7 @@ app/
   api/auth/[...nextauth]/
   api/chat/                    el orquestador
   api/documentos/[id]/         descarga acotada por tenant
+  api/adjuntos/                subida y entrega de adjuntos
 components/
   ui/                          primitivas sobre elementos nativos
   chat/  shell/  brand/  pwa/
@@ -80,6 +81,7 @@ lib/
     tools/                     una carpeta por módulo
   documents/                   generadores de PDF, DOCX y texto
   plans/                       planes, rutinas y su exportación
+  attachments/                 validación, extracción y resolución
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación

@@ -5,6 +5,88 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 4 — Adjuntos y voz
+
+### La decisión que define esta fase
+
+**Gemini lee PDF, imágenes y audio de forma nativa**, así que CIAN no extrae
+texto de un PDF ni transcribe audio con una biblioteca aparte: el archivo va al
+modelo tal cual.
+
+Eso resuelve tres cosas de golpe:
+
+- **Ninguna dependencia fuera de la lista autorizada del PRD.** Extraer texto
+  de PDF habría exigido `pdfjs-dist` o similar; transcribir audio, un servicio
+  aparte.
+- **Mejor resultado.** Un PDF conserva su maquetación y una foto de un cuaderno
+  se lee como imagen, no como texto mal reconocido por OCR.
+- **Menos piezas que puedan fallar.**
+
+La única excepción es Word, que Gemini no entiende. De ahí sí se saca el texto,
+también sin dependencias: un `.docx` es un zip, así que se lee
+`word/document.xml` con `node:zlib` y se le quitan las etiquetas.
+
+Límites propios muy por debajo del techo del proveedor (100 MB inline, 50 MB
+por PDF): 10 MB por imagen, 20 MB por PDF o audio, 5 MB por documento, hasta 5
+archivos por mensaje.
+
+### Lo que quedó verificado
+
+- **715 pruebas**, build y typecheck limpios.
+- **La extracción de Word funciona sobre un zip real** construido a mano en la
+  prueba, no sobre un mock.
+- **El mensaje ante un tipo no soportado dice qué sí se puede subir** y, ante
+  uno muy grande, cuánto pesa y cuál es el tope. Es el criterio de aceptación.
+
+### Lo que no se pudo verificar
+
+1. **Que subir un PDF de 20 páginas y preguntar por su contenido funcione**, y
+   que una foto de un cuaderno sirva para pedir ayuda con la tarea. Depende del
+   modelo y de que Blob esté conectado.
+2. **Que el dictado funcione en Safari iOS y Chrome Android.** Hay dos caminos
+   implementados y el primero disponible gana, pero no hay dispositivos aquí.
+3. **Que la lectura por voz respete la velocidad y se detenga a media frase.**
+   `SpeechSynthesis` varía bastante entre navegadores.
+
+### Decisiones que conviene no revertir sin leer esto
+
+- **El dictado tiene dos caminos y no son equivalentes.** Con Web Speech API la
+  voz **no sale del dispositivo**; con el respaldo de grabación, el audio se
+  sube y lo transcribe Gemini. La interfaz lo dice al grabar, porque es una
+  diferencia de privacidad, no de implementación.
+
+- **La lectura por voz nunca arranca sola** y `cancel()` corta a media palabra.
+  Quien la activa por error necesita cortarla ya, no esperar al final del
+  párrafo.
+
+- **Los adjuntos se suben al elegirlos, no al enviar.** La espera se reparte
+  mientras la persona escribe. El precio es que un archivo elegido y nunca
+  enviado queda huérfano; `listOrphanAttachments` los encuentra y el barrido
+  programado llega con Vercel Cron en la Fase 8.
+
+- **Un mensaje puede ser solo un archivo, sin texto.** Una foto del cuaderno
+  basta como pregunta.
+
+- **Las partes de archivo se materializan en el servidor**, nunca en el
+  cliente: el modelo recibe base64 y el navegador solo ve `/api/adjuntos/<id>`.
+  Es lo que mantiene los archivos privados de verdad.
+
+### Deuda técnica
+
+- **Al editar un mensaje no se reenvían sus adjuntos.** El mensaje original
+  los conserva, pero la versión editada va sin ellos. Reenviarlos duplicaría
+  los archivos y quitarlos silenciosamente también confunde; hay que decidirlo
+  con calma.
+
+- **Las imágenes se sirven con `<img>` y no con `next/image`.** La ruta es
+  privada y dinámica, y el optimizador no puede leerla. Se pierde el
+  redimensionado automático.
+
+- **No hay recorte ni compresión de imágenes en el cliente.** Una foto de
+  teléfono moderna puede acercarse al límite de 10 MB.
+
+---
+
 ## Fase 3 — Planes y rutinas
 
 ### Lo que quedó verificado

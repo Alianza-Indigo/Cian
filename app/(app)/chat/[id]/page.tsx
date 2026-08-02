@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireTenantContext } from '@/lib/tenant/context';
+import { getEffectivePreferences } from '@/lib/db/repositories/preferences';
 import { getConversation } from '@/lib/db/repositories/conversations';
 import { listMessages } from '@/lib/db/repositories/messages';
 import { toUIMessages } from '@/lib/ai/ui-messages';
@@ -32,13 +33,17 @@ export default async function ConversacionPage({ params }: PageProps) {
     notFound();
   }
 
-  const rows = await listMessages(ctx, conversation.id);
+  const [rows, preferences] = await Promise.all([
+    listMessages(ctx, conversation.id),
+    getEffectivePreferences(ctx),
+  ]);
 
   return (
     <Chat
       conversationId={conversation.id}
       initialMessages={toUIMessages(rows)}
       isNew={false}
+      speechRate={preferences.speechRate}
     />
   );
 }

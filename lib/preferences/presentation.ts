@@ -14,7 +14,10 @@ import {
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
   TEXT_SCALE_STEPS,
+  SPEECH_RATE_DEFAULT,
+  SPEECH_RATE_STEPS,
   THEMES,
+  clampSpeechRate,
   clampTextScale,
   type EffectivePreferences,
 } from './types';
@@ -26,6 +29,8 @@ export {
   DETAIL_LEVELS,
   THEMES,
   TEXT_SCALE_STEPS,
+  SPEECH_RATE_STEPS,
+  SPEECH_RATE_DEFAULT,
   TEXT_SCALE_DEFAULT,
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
@@ -103,6 +108,7 @@ export function serializePreferencesCookie(
     m: preferences.reducedMotion ? 1 : 0,
     t: preferences.theme,
     l: preferences.detailLevel,
+    v: preferences.speechRate,
   });
 }
 
@@ -130,6 +136,9 @@ export function parsePreferencesCookie(
       detailLevel: detailLevel ?? DEFAULT_PREFERENCES.detailLevel,
       textScale: clampTextScale(scale),
       reducedMotion: raw.m === 1 || raw.m === true,
+      speechRate: clampSpeechRate(
+        typeof raw.v === 'number' ? raw.v : SPEECH_RATE_DEFAULT,
+      ),
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };

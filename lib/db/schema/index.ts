@@ -9,3 +9,4 @@ export * from './usage';
 export * from './documents';
 export * from './plans';
 export * from './routines';
+export * from './attachments';
