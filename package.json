@@ -14,7 +14,8 @@
     "test": "node --import ./tests/register-hooks.mjs --test tests/*.test.ts",
     "db:setup": "node --env-file-if-exists=.env.local scripts/db-setup.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "vapid:generate": "node scripts/generate-vapid.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.31",

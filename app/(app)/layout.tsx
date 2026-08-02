@@ -18,7 +18,10 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: '/educacion', label: 'Educación', icon: 'educacion' },
   { href: '/biblioteca', label: 'Biblioteca', icon: 'biblioteca' },
   { href: '/documentos', label: 'Documentos', icon: 'documentos' },
+  { href: '/equipo', label: 'Equipo de apoyo', icon: 'equipo' },
+  { href: '/compartido', label: 'Compartido conmigo', icon: 'compartido' },
   { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
+  { href: '/configuracion/avisos', label: 'Avisos', icon: 'avisos' },
   {
     href: '/configuracion/accesibilidad',
     label: 'Accesibilidad',

@@ -77,3 +77,65 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+/*
+ * Notificaciones (Fase 8).
+ *
+ * El contenido llega cifrado y el navegador ya lo descifro cuando este codigo
+ * corre. Se muestra tal cual: no se pide nada a la red ni se guarda nada en
+ * cache, porque el texto puede decir a que hora se bana una persona.
+ *
+ * `requireInteraction` queda en false a proposito. Una notificacion que se
+ * queda fija en pantalla hasta que la tocas es exactamente el tipo de presion
+ * que esta plataforma no quiere ejercer.
+ */
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch (error) {
+    payload = { title: 'CIAN', body: event.data.text() };
+  }
+
+  const title = payload.title || 'CIAN';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Sin vibracion y sin sonido forzado: el dispositivo decide.
+      requireInteraction: false,
+      // La etiqueta evita que se apilen varios avisos del mismo recordatorio.
+      tag: payload.tag || title,
+      data: { url: payload.url || '/' },
+    }),
+  );
+});
+
+/*
+ * Al tocar la notificacion se enfoca una pestana ya abierta en vez de abrir
+ * otra. Acumular pestanas de la misma aplicacion es ruido, y este modulo
+ * existe justamente para no anadir ruido.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const target = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            if ('navigate' in client) client.navigate(target);
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow(target);
+      }),
+  );
+});

@@ -5,6 +5,68 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ---
 
+## 2026-08-02 — Fase 8
+
+### Pertenecer al equipo no da acceso a nada
+
+Se podía haber modelado al invitado como un rol en `tenant_members`, que es más
+corto de escribir. Se descartó: un rol es una puerta que se abre una vez y
+después nadie revisa.
+
+`support_team_members` dice quién es quién; `resource_shares` es la **única**
+tabla que concede lectura. Un docente aceptado sin un solo `resource_share` ve
+lo mismo que un desconocido. Eso es lo que hace posibles los dos criterios del
+PRD —permisos granulares y revocación inmediata— sin ningún mecanismo extra.
+
+### Revocar es poner una fecha, no borrar
+
+`revoked_at` conserva la constancia de que el acceso existió, que es lo que
+permite responder «¿quién pudo ver esto en marzo?». Como cada lectura exige
+`revoked_at IS NULL`, el efecto es inmediato aunque la sesión del invitado siga
+abierta: no hay ningún permiso guardado en la cookie ni en el token.
+
+### El token de invitación se guarda hasheado y el correo tiene que coincidir
+
+En la base va el SHA-256, nunca el token: un volcado de tabla no debe permitir
+aceptar invitaciones ajenas. Y aceptar exige que el correo de la sesión sea el
+mismo al que se envió, porque un enlace reenviado a un grupo de WhatsApp daría
+acceso a quien lo abriera primero.
+
+### El modelo comparte pero no invita
+
+Compartir con quien ya está en el equipo lo puede hacer el orquestador. Invitar
+no: manda un correo a una persona real y crea un enlace de acceso, y que eso
+salga de una frase mal entendida es un riesgo que no compensa.
+
+Tampoco elige a quién: si el nombre encaja con más de una persona, pregunta.
+Compartir con quien no era no tiene deshacer que sirva, porque ya lo vio.
+
+### Sin dependencias nuevas
+
+Web Push a mano sobre `node:crypto` y correo por REST con `fetch`, en vez de
+`web-push` y el SDK de Resend. La regla de oro del PRD pide proponer cualquier
+dependencia fuera de la lista antes de instalarla. El costo y el riesgo de esa
+decisión están en NOTES.md, con lo que está verificado y lo que no.
+
+### Los recordatorios no insisten
+
+`ReminderSchedule` es deliberadamente pobre: hora, minutos y días. Sin
+repeticiones cada N minutos, sin «insistir hasta que confirmes», sin escaladas.
+Un recordatorio que insiste no ayuda a arrancar una rutina; entrena a ignorar
+la aplicación.
+
+Por lo mismo, lo que cae en horas de silencio se marca como enviado y **no** se
+acumula: nadie quiere la notificación de la rutina matutina a las siete de la
+tarde.
+
+### Nada llega hasta que alguien lo pide
+
+El valor por omisión de `user_preferences.notifications` no enciende ningún
+canal. Una plataforma para personas neurodivergentes que empieza a notificar
+sola es una plataforma que se desinstala.
+
+---
+
 ## 2026-08-02 — Fase 7
 
 ### La escalera de derivación no es una tool

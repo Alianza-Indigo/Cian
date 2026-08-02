@@ -5,6 +5,112 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 8 — Equipo de apoyo y recordatorios
+
+### Web Push escrito a mano, y por qué
+
+`web-push` no está en la lista de dependencias autorizadas del PRD (sección 2)
+y la regla de oro dice que cualquier otra se propone antes de instalar. Se
+preguntó y no hubo respuesta, así que se implementó sobre `node:crypto`:
+RFC 8291 (cifrado del contenido), RFC 8188 (formato `aes128gcm`) y RFC 8292
+(el JWT de VAPID).
+
+**Qué está verificado.** Que un receptor escrito aparte —siguiendo el RFC, sin
+compartir código con el emisor— recupera el mensaje; que la cabecera tiene la
+disposición exacta (salt 16, rs 4, idlen 1, clave efímera 65); que el
+delimitador de último registro es `0x02`; que cada envío usa sal y clave
+efímera nuevas; que un mensaje cifrado para una suscripción no se descifra con
+otra; y que el JWT valida contra su propia clave pública con la audiencia y la
+caducidad correctas.
+
+**Qué NO está verificado.** Que un navegador real lo descifre. Eso exige el
+vector de prueba oficial del RFC 8291 o un dispositivo, y desde este entorno no
+hay salida de red (`rfc-editor.org` devuelve 403 en el proxy). Si en pruebas
+reales el servicio de push devuelve 400 o la notificación llega vacía, lo más
+probable es que falle alguna de las cadenas `info` de `webpush.ts`, y
+sustituir ese archivo por `web-push` son unas quince líneas.
+
+**Es el pendiente más importante de esta fase.** Conviene probarlo en un
+Android instalado antes de anunciarlo a nadie.
+
+### El cron cada 15 minutos necesita plan Pro
+
+`vercel.json` declara `*/15 * * * *` para `/api/cron/recordatorios`. En el plan
+Hobby de Vercel los cron corren **una vez al día**, así que ahí el despliegue lo
+degrada o lo rechaza.
+
+No se puso un barrido diario porque haría inútil la función: un recordatorio de
+rutina matutina que puede llegar con horas de retraso no es un recordatorio.
+Con `*/15` el sistema es correcto en cuanto el proyecto suba de plan, y
+mientras tanto lo que falla es visible —los recordatorios no salen— en vez de
+llegar tarde y en silencio.
+
+`SWEEP_MINUTES` en `lib/notifications/types.ts` es la constante que amarra el
+tamaño de la ventana con la frecuencia del cron. **Cambiar el cron sin cambiar
+esa constante produce recordatorios perdidos o duplicados.**
+
+### Correo por REST, sin SDK
+
+Se habla con Resend por su API con `fetch`. El SDK oficial no aporta nada que
+`fetch` no haga y sería otra dependencia fuera de la lista.
+
+Sin `RESEND_API_KEY` la aplicación no falla: la invitación se crea igual y la
+interfaz muestra el enlace para compartirlo a mano. Es peor experiencia, pero
+deja a la persona con algo que hacer.
+
+**Sin verificar:** que Resend acepte el remitente. Exige un dominio verificado
+en su panel, y eso es configuración, no código.
+
+### Las dos excepciones al ámbito de tenant
+
+Hasta la Fase 7, la única función de repositorio sin `TenantContext` era
+`listMembershipsForUser`. Esta fase añade dos casos más, y ambos merecen
+revisión antes de replicar el patrón:
+
+1. **El lado del invitado** (`listSharedWithMe`, `getSharedResource`,
+   `acceptInvitation`, `addSharedNote`, `readSharedContent`). El invitado no
+   pertenece al tenant de quien comparte: exigirle contexto haría imposible la
+   operación. A cambio, la restricción es más estrecha: se parte siempre del
+   `userId` de la sesión, nunca de un identificador de la petición, y el
+   `tenantId` sale de la fila del `share` ya verificada.
+2. **El barrido del cron** (`listActiveRemindersForSweep`). Cruza tenants a
+   propósito porque no actúa en nombre de nadie. Lo que lo hace seguro es lo
+   que hace después: cada recordatorio se despacha solo a las suscripciones y
+   al correo de su propio `user_id`, tomados de la misma fila.
+
+La prueba `tenant-scope.test.ts` cubre las 27 funciones nuevas que **sí** llevan
+contexto. Las cinco excepciones no pueden cubrirse ahí por definición, y esa es
+exactamente la razón por la que están enumeradas aquí.
+
+### Deuda descubierta al escribir esto
+
+`tenant-scope.test.ts` **no incluía el repositorio de crisis de la Fase 7**. Se
+agregó en esta fase junto con los de la Fase 8. La prueba enumera funciones a
+mano, así que agregar una y no registrarla ahí pasa desapercibido. Vale la pena
+sustituirla por algo que descubra las exportaciones automáticamente.
+
+### Pendientes de esta fase
+
+- **Sin probar en dispositivo real.** Ni el push en Android instalado, ni la
+  guía de instalación en iOS, ni el respaldo por correo. Son tres de los siete
+  criterios de aceptación y los tres dependen de hardware que no había.
+- **La revocación corta al recargar, no en la pestaña abierta.** Cada lectura
+  consulta la fila viva del `share`, así que el corte es inmediato en cualquier
+  petición nueva; lo que ya está pintado en pantalla sigue ahí hasta que la
+  persona navegue. Cerrarlo del todo exigiría empujar al cliente, y eso es
+  infraestructura que esta fase no trae.
+- **`recordSharedAccess` traga sus errores.** Si falla el registro, el acceso
+  ocurre igual. Se prefirió no dejar a alguien sin ver lo que le compartieron
+  por un fallo de escritura, pero significa que el registro es best-effort.
+- **Compartir es siempre de lectura.** Nadie edita lo que no es suyo, con
+  ningún permiso. Es la decisión, no una limitación temporal.
+- **La bitácora de crisis y el chat no son compartibles**, a propósito. El PRD
+  usa la primera como ejemplo de lo que alguien puede querer no compartir.
+- **Sin recordatorios ligados automáticamente a rutinas.** `reminders.resourceId`
+  existe y las tools lo aceptan, pero crear una rutina no crea su recordatorio.
+
+---
+
 ## Fase 7 — Crisis no emergentes
 
 ### La escalera de derivación corre antes del modelo, no dentro de él

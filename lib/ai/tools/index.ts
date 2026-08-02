@@ -21,6 +21,8 @@ import { buildNutritionTools } from './nutrition';
 import { buildLibraryTools } from './library';
 import { buildEducationTools } from './education';
 import { buildCrisisTools } from './crisis';
+import { buildTeamTools } from './team';
+import { buildReminderTools } from './reminders';
 
 export type ToolRegistry = Record<string, Tool>;
 
@@ -45,5 +47,7 @@ export function buildTools(toolContext: ToolContext): ToolRegistry {
     ...buildLibraryTools(toolContext),
     ...buildEducationTools(toolContext),
     ...buildCrisisTools(toolContext),
+    ...buildTeamTools(toolContext),
+    ...buildReminderTools(toolContext),
   };
 }

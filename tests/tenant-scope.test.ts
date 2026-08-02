@@ -159,6 +159,43 @@ import {
   linkEducationDocument,
   listEducationItems,
 } from '../lib/db/repositories/education';
+import {
+  closeCrisisEvent,
+  deleteCrisisEvent,
+  deleteCrisisProtocol,
+  getCrisisEvent,
+  getOpenCrisisEvent,
+  linkPostPlan,
+  listCrisisEvents,
+  listCrisisProtocols,
+  recordEscalation,
+  saveCrisisProtocol,
+  setProtocolActive,
+  startCrisisEvent,
+} from '../lib/db/repositories/crisis';
+import {
+  countNotesByShare,
+  deleteMember,
+  getTeamMember,
+  inviteMember,
+  listSharesByOwner,
+  listTeamMembers,
+  revokeMember,
+  revokeShare,
+  shareResource,
+} from '../lib/db/repositories/team';
+import {
+  createReminder,
+  deletePushSubscription,
+  deleteReminder,
+  getNotificationPreferences,
+  listDeliveries,
+  listPushSubscriptions,
+  listReminders,
+  saveNotificationPreferences,
+  savePushSubscription,
+  setReminderActive,
+} from '../lib/db/repositories/notifications';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -506,6 +543,103 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       (ctx) => linkEducationDocument(ctx as TenantContext, CONV, CONV),
     ],
     ['deleteEducationItem', (ctx) => deleteEducationItem(ctx as TenantContext, CONV)],
+
+    // --- Fase 7: crisis -----------------------------------------------------
+    [
+      'startCrisisEvent',
+      (ctx) => startCrisisEvent(ctx as TenantContext, { severity: 'moderada' }),
+    ],
+    [
+      'recordEscalation',
+      (ctx) => recordEscalation(ctx as TenantContext, { categories: ['x'] }),
+    ],
+    ['getOpenCrisisEvent', (ctx) => getOpenCrisisEvent(ctx as TenantContext)],
+    ['closeCrisisEvent', (ctx) => closeCrisisEvent(ctx as TenantContext, {})],
+    ['getCrisisEvent', (ctx) => getCrisisEvent(ctx as TenantContext, CONV)],
+    ['listCrisisEvents', (ctx) => listCrisisEvents(ctx as TenantContext)],
+    ['linkPostPlan', (ctx) => linkPostPlan(ctx as TenantContext, CONV, CONV)],
+    ['deleteCrisisEvent', (ctx) => deleteCrisisEvent(ctx as TenantContext, CONV)],
+    [
+      'saveCrisisProtocol',
+      (ctx) =>
+        saveCrisisProtocol(ctx as TenantContext, {
+          title: 'Protocolo',
+          steps: [{ title: 'Baja las luces' }],
+        }),
+    ],
+    ['listCrisisProtocols', (ctx) => listCrisisProtocols(ctx as TenantContext)],
+    ['setProtocolActive', (ctx) => setProtocolActive(ctx as TenantContext, CONV, false)],
+    ['deleteCrisisProtocol', (ctx) => deleteCrisisProtocol(ctx as TenantContext, CONV)],
+
+    // --- Fase 8: equipo de apoyo -------------------------------------------
+    [
+      'inviteMember',
+      (ctx) =>
+        inviteMember(ctx as TenantContext, {
+          email: 'alguien@ejemplo.mx',
+          relationship: 'familiar',
+        }),
+    ],
+    ['listTeamMembers', (ctx) => listTeamMembers(ctx as TenantContext)],
+    ['getTeamMember', (ctx) => getTeamMember(ctx as TenantContext, CONV)],
+    ['revokeMember', (ctx) => revokeMember(ctx as TenantContext, CONV)],
+    ['deleteMember', (ctx) => deleteMember(ctx as TenantContext, CONV)],
+    [
+      'shareResource',
+      (ctx) =>
+        shareResource(ctx as TenantContext, {
+          memberId: CONV,
+          resourceType: 'plan',
+          resourceId: CONV,
+          resourceTitle: 'Un plan',
+          permission: 'lectura',
+        }),
+    ],
+    ['revokeShare', (ctx) => revokeShare(ctx as TenantContext, CONV)],
+    ['listSharesByOwner', (ctx) => listSharesByOwner(ctx as TenantContext)],
+    ['countNotesByShare', (ctx) => countNotesByShare(ctx as TenantContext)],
+
+    // --- Fase 8: recordatorios ---------------------------------------------
+    [
+      'savePushSubscription',
+      (ctx) =>
+        savePushSubscription(ctx as TenantContext, {
+          endpoint: 'https://push.example/abc',
+          keys: { p256dh: 'x', auth: 'y' },
+        }),
+    ],
+    ['listPushSubscriptions', (ctx) => listPushSubscriptions(ctx as TenantContext)],
+    [
+      'deletePushSubscription',
+      (ctx) => deletePushSubscription(ctx as TenantContext, 'https://push.example/abc'),
+    ],
+    [
+      'createReminder',
+      (ctx) =>
+        createReminder(ctx as TenantContext, {
+          kind: 'rutina',
+          title: 'Rutina',
+          schedule: { hour: 7, minute: 0, days: [], timeZone: 'America/Mexico_City' },
+          channels: [],
+        }),
+    ],
+    ['listReminders', (ctx) => listReminders(ctx as TenantContext)],
+    ['setReminderActive', (ctx) => setReminderActive(ctx as TenantContext, CONV, false)],
+    ['deleteReminder', (ctx) => deleteReminder(ctx as TenantContext, CONV)],
+    ['listDeliveries', (ctx) => listDeliveries(ctx as TenantContext)],
+    [
+      'getNotificationPreferences',
+      (ctx) => getNotificationPreferences(ctx as TenantContext),
+    ],
+    [
+      'saveNotificationPreferences',
+      (ctx) =>
+        saveNotificationPreferences(ctx as TenantContext, {
+          channels: [],
+          quietHours: { startHour: 22, endHour: 7 },
+          timeZone: 'America/Mexico_City',
+        }),
+    ],
   ];
 
 describe('assertTenantContext', () => {

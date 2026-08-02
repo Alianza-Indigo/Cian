@@ -9,13 +9,16 @@ import {
   CheckSquare,
   GraduationCap,
   FileText,
+  Bell,
   LifeBuoy,
   ListChecks,
   Menu,
   Plus,
   Settings,
+  Share2,
   Sparkles,
   Target,
+  Users,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
@@ -42,6 +45,9 @@ export type NavItem = {
     | 'biblioteca'
     | 'documentos'
     | 'memorias'
+    | 'equipo'
+    | 'compartido'
+    | 'avisos'
     | 'configuracion';
 };
 
@@ -56,6 +62,9 @@ const ICONS = {
   biblioteca: BookOpen,
   documentos: FileText,
   memorias: Brain,
+  equipo: Users,
+  compartido: Share2,
+  avisos: Bell,
   configuracion: Settings,
 } as const;
 

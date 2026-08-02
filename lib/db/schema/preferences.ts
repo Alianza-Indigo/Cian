@@ -18,6 +18,7 @@ import {
   uniqueIndex,
   uuid,
   text,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants';
 import { users } from './auth';
@@ -28,6 +29,10 @@ import {
   TEXT_SCALE_DEFAULT,
   THEMES,
 } from '../../preferences/types';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from '../../notifications/types';
 
 /** Densidad de informacion: compacta / comoda / amplia. */
 export const densityEnum = pgEnum('preference_density', DENSITIES);
@@ -53,6 +58,18 @@ export const userPreferences = pgTable(
     theme: themeEnum('theme').notNull().default('system'),
     detailLevel: detailLevelEnum('detail_level').notNull().default('balanced'),
     speechRate: integer('speech_rate').notNull().default(SPEECH_RATE_DEFAULT),
+    /**
+     * Avisos: canales, silencios y zona horaria (Fase 8).
+     *
+     * Va como `jsonb` y no como columnas sueltas porque es un bloque que se
+     * lee y se escribe entero, y porque los canales son una lista que va a
+     * crecer. El valor por omisión no enciende ningún canal: nadie recibe
+     * notificaciones que no pidió.
+     */
+    notifications: jsonb('notifications')
+      .$type<NotificationPreferences>()
+      .notNull()
+      .default(DEFAULT_NOTIFICATION_PREFERENCES),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
