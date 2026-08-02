@@ -5,6 +5,104 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 10 — Consultorios virtuales
+
+### La dependencia que esta fase no puede evitar
+
+`livekit-client`. Es la única de todo el proyecto que no se ha podido sortear
+con lo que Node y el navegador ya traen.
+
+- **El token sí** está escrito a mano: es un JWT HS256 y `node:crypto` lo firma.
+  `lib/consultorio/livekit.ts`, con pruebas que comprueban que un token con las
+  reclamaciones alteradas se rechaza, que uno caducado se rechaza, y que el
+  permiso de grabar solo viaja cuando se concede.
+- **El cliente WebRTC no.** Señalización, ICE, publicación de pistas y
+  recuperación de red son un protocolo entero; escribirlo a mano no es una
+  opción razonable.
+
+Se consideró WebRTC punto a punto con `RTCPeerConnection` y señalización por
+sondeo, que para una consulta 1 a 1 es viable. Se descartó: sin TURN falla en
+las redes con NAT simétrico —entre un 10 % y un 20 % de las conexiones— y el
+criterio del PRD pide conectar en menos de cinco segundos entre dos redes
+distintas. Un stack propio que falla a veces, en un consultorio de salud, es
+peor que pedir la dependencia.
+
+**Todo lo demás de la sesión funciona sin ella**: agenda, sala de espera,
+notas, tareas, resumen, pizarra y consentimiento. La interfaz dice qué falta en
+vez de fingir.
+
+Al instalarla, lo que hay que escribir es el componente que consume
+`/api/consultorio/sala/[appointmentId]` —que ya devuelve token, URL y sala— y
+conecta. La ruta, los permisos y el consentimiento ya están.
+
+### `sessions` estaba ocupado
+
+El PRD nombra la tabla `sessions`, pero Auth.js la ocupa desde la Fase 0 para
+las sesiones de inicio de sesión. La tabla se llama `consult_sessions`; todo lo
+demás del esquema es idéntico al del PRD.
+
+### La prueba de las notas privadas mira el SQL, no el resultado
+
+El criterio dice que las notas privadas **jamás** aparecen en una respuesta
+accesible al usuario. Lo tentador sería sembrar dos notas y comprobar que la
+lectura devuelve una — y eso **no probaría el fallo que importa**: si alguien
+filtrara las notas al pintar en vez de en la consulta, esa prueba pasaría igual
+mientras las notas privadas viajan en la respuesta de red, donde cualquiera las
+lee abriendo las herramientas del navegador.
+
+Así que `tests/consultorio-notas.test.ts` compila la consulta y comprueba que
+la condición de visibilidad está en el `WHERE`, que la consulta del usuario
+nunca menciona `privada`, y —para que la prueba no se satisfaga filtrando
+siempre— que la del profesional **no** filtra.
+
+### Tres capas para que la grabación sea imposible sin consentimiento
+
+El criterio dice «imposible», no «desaconsejado»:
+
+1. `canStartRecording` exige una firma de cada rol.
+2. El permiso `roomRecord` del token solo se concede si esa función dice que sí.
+   Sin él, el servidor de medios rechaza la grabación aunque el cliente la pida.
+3. Las firmas se guardan con sello de tiempo **del servidor**, así que después
+   se puede responder quién autorizó y cuándo.
+
+Basta con que una parte retire su firma para que deje de ser posible.
+
+### Editar el perfil devuelve la verificación a pendiente
+
+Si cambian las especialidades o la cédula. Verificar a alguien como psicólogo y
+que después añada «psiquiatría» sin revisión sería exactamente el agujero que
+la verificación existe para tapar.
+
+### Pendientes de esta fase
+
+- **Sin video.** Cuatro criterios dependen de él: conectar en menos de cinco
+  segundos, pantalla compartida junto al video, y funcionar en Safari iOS. El
+  chat de sesión también, porque iba por el canal de datos de LiveKit.
+- **La pizarra no se sincroniza sola.** Se guarda en el servidor al soltar el
+  trazo y la otra parte la ve al recargar. El tiempo real necesita el canal de
+  datos de la videollamada.
+- **El resumen no lo genera la IA todavía.** El campo, la aprobación y la
+  publicación están; falta la llamada al modelo que redacte el borrador a
+  partir de las notas compartidas. Es media hora de trabajo y depende de una
+  decisión que no tocaba tomar sola: qué notas alimentan el resumen. Las
+  privadas del profesional, por definición, no deberían.
+- **Sin recordatorios de cita.** El alcance los pide. La infraestructura existe
+  entera desde la Fase 8 (`reminders` + barrido diario); falta crear el
+  recordatorio al confirmar una cita. No se hizo porque el barrido es diario y
+  un aviso de cita que llega «en algún momento del día» no sirve: conviene
+  resolverlo junto con la frecuencia del cron.
+- **Sin compartir documentos, planes y rutinas dentro de la sesión.** El
+  alcance lo pide. La Fase 8 ya tiene el mecanismo (`resource_shares`); falta
+  el atajo desde la pantalla de sesión.
+- **Sin subida de documentos de cédula.** El esquema tiene `license_docs`;
+  falta la subida a Blob desde el formulario.
+- **La verificación es del tenant, no de la plataforma.** Un admin de espacio
+  verifica a los profesionales de su espacio. Para una verificación central de
+  CIAN haría falta que el superadmin de la Fase 9 vea otros tenants, y esa
+  puerta no se abrió a la ligera.
+
+---
+
 ## Fase 9 — Membresías y panel administrativo
 
 ### Stripe por REST, sin SDK

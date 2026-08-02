@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Brain,
   BookOpen,
+  BriefcaseMedical,
   CreditCard,
   CheckSquare,
   GraduationCap,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Target,
   Users,
+  Video,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
@@ -50,6 +52,8 @@ export type NavItem = {
     | 'equipo'
     | 'compartido'
     | 'avisos'
+    | 'consultorio'
+    | 'profesional'
     | 'membresia'
     | 'admin'
     | 'configuracion';
@@ -70,6 +74,8 @@ const ICONS = {
   compartido: Share2,
   avisos: Bell,
   configuracion: Settings,
+  consultorio: Video,
+  profesional: BriefcaseMedical,
   membresia: CreditCard,
   admin: ShieldCheck,
 } as const;

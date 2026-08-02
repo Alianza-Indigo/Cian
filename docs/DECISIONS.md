@@ -5,6 +5,36 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ---
 
+## 2026-08-02 — Fase 10
+
+### El nombre de la sala lo deriva el servidor
+
+`roomNameFor(tenantId, appointmentId)`. Si el cliente pudiera pedir un nombre
+arbitrario, adivinar uno sería entrar a la consulta de otra persona. Se guarda
+en `appointments.room_id` al reservar y la ruta del token lo lee de ahí; en
+ningún punto se acepta un nombre de sala que venga de fuera.
+
+### La única lectura de citas pasa por `getAppointmentForParticipant`
+
+Filtra por tenant **y** por participación —profesional o persona atendida— en el
+mismo `where`. Es lo que sostiene «un profesional del tenant A no puede ver
+pacientes del tenant B» sin depender de que cada pantalla se acuerde.
+
+### Guardar un resumen nuevo retira la aprobación anterior
+
+Una aprobación es para un texto concreto, no para el hueco donde va. Regenerar
+el resumen y conservar el «publicado» permitiría publicar un texto que nadie
+aprobó, que es justo lo que el criterio prohíbe.
+
+### Los términos del profesional viven en código versionado
+
+Con número de versión, y se guarda cuál aceptó cada quien. El PRD pide que la
+responsabilidad del prestador quede «implementada, no solo escrita»: sin
+`terms_accepted_at` no hay perfil, y sin términos aceptados no se puede
+verificar a nadie ni siendo administrador.
+
+---
+
 ## 2026-08-02 — Fase 9
 
 ### El plan gratuito es un plan, no una demostración

@@ -210,6 +210,30 @@ import {
   listPromptKeys,
 } from '../lib/db/repositories/prompts';
 import { listTenantMembersWithUsers } from '../lib/db/repositories/tenants';
+import {
+  addAvailability,
+  addSessionNote,
+  busyIntervals,
+  deleteAvailability,
+  deleteSessionNote,
+  ensureSession,
+  getAppointmentForParticipant,
+  getMyProfessionalProfile,
+  getSessionForParticipant,
+  getWhiteboard,
+  listAvailability,
+  listMyAppointments,
+  listProfessionals,
+  listSessionNotes,
+  listSessionTasks,
+  requestAppointment,
+  saveWhiteboard,
+  sessionNotesQuery,
+  setAppointmentStatus,
+  setSessionTaskStatus,
+  setVerificationStatus,
+  upsertProfessionalProfile,
+} from '../lib/db/repositories/consultorio';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -683,6 +707,91 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     [
       'listTenantMembersWithUsers',
       (ctx) => listTenantMembersWithUsers(ctx as TenantContext),
+    ],
+
+    // --- Fase 10: consultorios ----------------------------------------------
+    [
+      'getMyProfessionalProfile',
+      (ctx) => getMyProfessionalProfile(ctx as TenantContext),
+    ],
+    [
+      'upsertProfessionalProfile',
+      (ctx) =>
+        upsertProfessionalProfile(ctx as TenantContext, {
+          specialties: ['coaching'],
+          acceptTerms: true,
+          termsVersion: 'x',
+        }),
+    ],
+    [
+      'setVerificationStatus',
+      (ctx) => setVerificationStatus(ctx as TenantContext, CONV, 'verificado'),
+    ],
+    ['listProfessionals', (ctx) => listProfessionals(ctx as TenantContext)],
+    ['listAvailability', (ctx) => listAvailability(ctx as TenantContext, CONV)],
+    [
+      'addAvailability',
+      (ctx) =>
+        addAvailability(ctx as TenantContext, {
+          professionalId: CONV,
+          weekday: 2,
+          startTime: '09:00',
+          endTime: '14:00',
+          timezone: 'America/Mexico_City',
+        }),
+    ],
+    ['deleteAvailability', (ctx) => deleteAvailability(ctx as TenantContext, CONV)],
+    [
+      'busyIntervals',
+      (ctx) => busyIntervals(ctx as TenantContext, CONV, new Date(0), new Date(1)),
+    ],
+    [
+      'requestAppointment',
+      (ctx) =>
+        requestAppointment(ctx as TenantContext, {
+          professionalId: CONV,
+          scheduledAt: new Date(Date.now() + 86_400_000),
+          durationMinutes: 50,
+        }),
+    ],
+    [
+      'getAppointmentForParticipant',
+      (ctx) => getAppointmentForParticipant(ctx as TenantContext, CONV),
+    ],
+    ['listMyAppointments', (ctx) => listMyAppointments(ctx as TenantContext)],
+    [
+      'setAppointmentStatus',
+      (ctx) => setAppointmentStatus(ctx as TenantContext, CONV, 'cancelada'),
+    ],
+    ['ensureSession', (ctx) => ensureSession(ctx as TenantContext, CONV)],
+    [
+      'getSessionForParticipant',
+      (ctx) => getSessionForParticipant(ctx as TenantContext, CONV),
+    ],
+    [
+      'addSessionNote',
+      (ctx) =>
+        addSessionNote(ctx as TenantContext, {
+          sessionId: CONV,
+          visibility: 'privada',
+          content: 'Hola',
+        }),
+    ],
+    ['listSessionNotes', (ctx) => listSessionNotes(ctx as TenantContext, CONV)],
+    ['deleteSessionNote', (ctx) => deleteSessionNote(ctx as TenantContext, CONV)],
+    [
+      'sessionNotesQuery',
+      async (ctx) => sessionNotesQuery(ctx as TenantContext, CONV, 'usuario'),
+    ],
+    ['listSessionTasks', (ctx) => listSessionTasks(ctx as TenantContext, CONV)],
+    [
+      'setSessionTaskStatus',
+      (ctx) => setSessionTaskStatus(ctx as TenantContext, CONV, 'hecha'),
+    ],
+    ['getWhiteboard', (ctx) => getWhiteboard(ctx as TenantContext, CONV)],
+    [
+      'saveWhiteboard',
+      (ctx) => saveWhiteboard(ctx as TenantContext, CONV, { strokes: [] }),
     ],
   ];
 
