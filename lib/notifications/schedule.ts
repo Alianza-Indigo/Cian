@@ -16,11 +16,7 @@
  * Por eso `ReminderSchedule` lleva `timeZone` y todo lo de aquí razona en hora
  * local de cada persona, no en la del servidor.
  */
-import {
-  SWEEP_MINUTES,
-  type QuietHours,
-  type ReminderSchedule,
-} from './types';
+import type { QuietHours, ReminderSchedule } from './types';
 
 export type LocalParts = {
   year: number;
@@ -110,18 +106,26 @@ export type DueInput = {
 
 export type DueVerdict =
   | { due: true }
-  | { due: false; reason: 'inactivo' | 'otro_dia' | 'aun_no' | 'ya_paso' | 'ya_enviado' };
+  | { due: false; reason: 'inactivo' | 'otro_dia' | 'ya_enviado' };
 
 /**
- * Si un recordatorio toca en este barrido.
+ * Si un recordatorio entra en el resumen de hoy.
  *
- * La ventana es `[hora, hora + SWEEP_MINUTES)`: el barrido de las 7:00 recoge
- * lo programado entre 7:00 y 7:14, y el de las 7:15 lo siguiente. Ni se pierde
- * nada ni se manda dos veces.
+ * ## Por qué no hay ventana horaria
  *
- * El corte definitivo contra el duplicado es `lastSentAt`: si ya salió algo
- * hoy —en hora local de la persona— no vuelve a salir, aunque el cron se
- * ejecute de más o se reintente un despliegue.
+ * El cron corre una vez al día (ver `SWEEP_HOUR_UTC`). Con un solo barrido, una
+ * ventana de quince minutos alrededor de la hora elegida dejaría fuera a todo
+ * el mundo menos a quien la puso justo a esa hora: el 90 % de los
+ * recordatorios no se enviaría nunca, en silencio.
+ *
+ * Así que la regla es de día, no de hora: **entra todo lo que toca hoy y no ha
+ * salido hoy**. La hora elegida sigue importando —se escribe en el aviso y
+ * decide el silencio— pero no controla el instante del envío, porque con un
+ * cron diario eso no se puede prometer.
+ *
+ * El corte contra el duplicado es `lastSentAt` comparado en **hora local de la
+ * persona**: si ya salió algo hoy no vuelve a salir, aunque el cron se ejecute
+ * de más o se reintente un despliegue.
  */
 export function isDue(input: DueInput, now: Date): DueVerdict {
   if (!input.active) return { due: false, reason: 'inactivo' };
@@ -131,14 +135,6 @@ export function isDue(input: DueInput, now: Date): DueVerdict {
 
   if (schedule.days.length > 0 && !schedule.days.includes(local.weekday)) {
     return { due: false, reason: 'otro_dia' };
-  }
-
-  const scheduledMinutes = schedule.hour * 60 + schedule.minute;
-  const nowMinutes = local.hour * 60 + local.minute;
-
-  if (nowMinutes < scheduledMinutes) return { due: false, reason: 'aun_no' };
-  if (nowMinutes >= scheduledMinutes + SWEEP_MINUTES) {
-    return { due: false, reason: 'ya_paso' };
   }
 
   if (

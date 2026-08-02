@@ -48,6 +48,17 @@ Web Push a mano sobre `node:crypto` y correo por REST con `fetch`, en vez de
 dependencia fuera de la lista antes de instalarla. El costo y el riesgo de esa
 decisión están en NOTES.md, con lo que está verificado y lo que no.
 
+### El barrido es diario y la aplicación lo dice
+
+El cron corre una vez al día. Se decidió no fingir puntualidad: los avisos son
+un resumen de lo que toca hoy, con la hora elegida escrita dentro del mensaje,
+y tanto la interfaz como el prompt del orquestador lo explican antes de que la
+persona cree su primer recordatorio.
+
+La alternativa —dejar la ventana de quince minutos y un cron diario— habría
+producido un sistema que parece funcionar y no envía casi nada, fallando en
+silencio. Entre una función más pobre y una función que miente, la pobre.
+
 ### Los recordatorios no insisten
 
 `ReminderSchedule` es deliberadamente pobre: hora, minutos y días. Sin

@@ -13,6 +13,7 @@ import {
   DELIVERY_STATUS_LABELS,
   REMINDER_KINDS,
   REMINDER_KIND_LABELS,
+  SWEEP_DESCRIPTION,
   WEEKDAY_NAMES,
   WEEKDAY_SHORT,
   type Channel,
@@ -203,6 +204,16 @@ export function NotificationSettings({
         {isPending ? 'Guardando…' : status}
       </p>
 
+      {/*
+        Decir cómo funciona de verdad, arriba y sin letra chica. Una persona
+        que espera un aviso a las 7:00 en punto y lo recibe como resumen deja
+        de confiar en la aplicación; una que sabe de antemano cómo llega, no.
+      */}
+      <Card>
+        <h2 className="text-sm font-semibold">Cómo llegan los avisos</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{SWEEP_DESCRIPTION}</p>
+      </Card>
+
       {/* --- Dispositivo --------------------------------------------------- */}
       <section aria-labelledby="dispositivo">
         <h2 id="dispositivo" className="text-lg font-semibold tracking-tight">
@@ -311,8 +322,8 @@ export function NotificationSettings({
           <div className="mt-4 border-t border-border pt-4">
             <h3 className="text-sm font-medium">Horas de silencio</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Dentro de esta franja no llega nada, y lo que caiga ahí no se
-              acumula para después.
+              Un recordatorio cuya hora caiga en esta franja no se envía, y
+              tampoco se acumula para después.
             </p>
 
             <div className="mt-2 flex flex-wrap items-end gap-3">
@@ -557,6 +568,11 @@ export function NotificationSettings({
                   })}
                 </div>
               </fieldset>
+
+              <p className="text-sm text-muted-foreground">
+                La hora aparece escrita en el aviso, pero el aviso sale en el
+                resumen de la mañana, no a esa hora exacta.
+              </p>
 
               {channels.length === 0 ? (
                 <p className="text-sm text-muted-foreground">

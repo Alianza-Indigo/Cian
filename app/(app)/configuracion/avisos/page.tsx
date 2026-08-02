@@ -26,8 +26,9 @@ export default async function AvisosPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Avisos</h1>
         <p className="mt-2 text-muted-foreground">
-          Recordatorios de rutinas y tareas. Todo empieza apagado y puedes
-          apagarlo otra vez cuando quieras: aquí nadie te va a insistir.
+          Recordatorios de rutinas y tareas, en un resumen diario. Todo empieza
+          apagado y puedes apagarlo otra vez cuando quieras: aquí nadie te va a
+          insistir.
         </p>
       </div>
 

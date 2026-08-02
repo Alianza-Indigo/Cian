@@ -96,12 +96,37 @@ export type QuietHours = {
 
 export const DEFAULT_QUIET_HOURS: QuietHours = { startHour: 22, endHour: 7 };
 
+// --- El barrido diario -------------------------------------------------------
+
 /**
- * Cada cuánto barre el cron. Define también la ventana de tolerancia: un
- * recordatorio de las 7:00 se despacha en el barrido que cae entre 7:00 y
- * 7:15, nunca dos veces.
+ * Hora UTC a la que corre el cron. Debe coincidir con `vercel.json`.
+ *
+ * ## Por qué una vez al día, y qué significa eso
+ *
+ * El cron corre **una sola vez cada 24 horas**. Eso cambia lo que CIAN puede
+ * prometer, y conviene decirlo sin adornos: un recordatorio no suena a la hora
+ * que la persona eligió, sino en el barrido.
+ *
+ * De ahí que los avisos sean un **resumen del día**: en el barrido sale todo lo
+ * que toca hoy, con su hora escrita en el mensaje. «Rutina de la mañana — a las
+ * 07:00» es útil como agenda aunque llegue a las 7:00 en punto y no a las 7:00
+ * de la tarde.
+ *
+ * Las 13:00 UTC son las 7:00 en Ciudad de México, que es donde vive casi toda
+ * la gente que usa CIAN. Así el resumen llega al empezar el día y los
+ * recordatorios matutinos —los más comunes— caen prácticamente puntuales.
+ *
+ * Si algún día el proyecto sube a un plan con cron más frecuentes, lo que hay
+ * que cambiar es esta constante, `vercel.json` y volver a meter una ventana en
+ * `isDue`. Mientras tanto, la aplicación dice la verdad sobre lo que hace.
  */
-export const SWEEP_MINUTES = 15;
+export const SWEEP_HOUR_UTC = 13;
+
+/** Texto para la interfaz. Que nadie tenga que deducirlo del código. */
+export const SWEEP_DESCRIPTION =
+  'Los avisos salen una vez al día, alrededor de las 7:00 de la mañana (hora ' +
+  'del centro de México), como un resumen de lo que toca hoy. La hora que ' +
+  'elijas aparece en el aviso, pero no suena a esa hora exacta.';
 
 // --- Preferencias de aviso ---------------------------------------------------
 

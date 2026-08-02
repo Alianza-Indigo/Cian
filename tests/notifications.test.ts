@@ -41,10 +41,11 @@ import {
 } from '../lib/notifications/schedule';
 import {
   DEFAULT_QUIET_HOURS,
-  SWEEP_MINUTES,
+  SWEEP_HOUR_UTC,
   WEEKDAY_NAMES,
   type ReminderSchedule,
 } from '../lib/notifications/types';
+import { digestBody } from '../lib/notifications/dispatch';
 import {
   encryptPayload,
   fromBase64Url,
@@ -122,50 +123,61 @@ describe('horas de silencio', () => {
   });
 });
 
-describe('a quién le toca en este barrido', () => {
+describe('a quién le toca en el resumen del día', () => {
   const base = { schedule: schedule(), active: true, lastSentAt: null };
 
-  it('dispara dentro de la ventana del barrido', () => {
-    assert.equal(isDue(base, new Date('2026-08-03T13:00:00Z')).due, true);
-    assert.equal(isDue(base, new Date('2026-08-03T13:14:00Z')).due, true);
+  /*
+   * El cron corre una vez al día. Con un solo barrido no hay ventana horaria:
+   * si la hubiera, solo se enviaría lo programado justo a la hora del cron y
+   * todo lo demás se perdería en silencio. La regla es de día, no de hora.
+   */
+  it('entra sin importar a qué hora del día corra el barrido', () => {
+    for (const instant of [
+      '2026-08-03T13:00:00Z',
+      '2026-08-03T02:00:00Z',
+      '2026-08-03T23:30:00Z',
+    ]) {
+      assert.equal(isDue(base, new Date(instant)).due, true, instant);
+    }
   });
 
-  it('no dispara antes de la hora', () => {
-    const verdict = isDue(base, new Date('2026-08-03T12:59:00Z'));
-    assert.equal(verdict.due, false);
-    assert.equal(verdict.due === false && verdict.reason, 'aun_no');
+  it('entra aunque su hora ya haya pasado en local', () => {
+    // 20:00 UTC son las 14:00 en México: las 7:00 quedaron muy atrás.
+    assert.equal(isDue(base, new Date('2026-08-03T20:00:00Z')).due, true);
   });
 
-  it('no dispara pasada la ventana', () => {
-    const verdict = isDue(base, new Date('2026-08-03T13:15:00Z'));
-    assert.equal(verdict.due, false);
-    assert.equal(verdict.due === false && verdict.reason, 'ya_paso');
-  });
-
-  it('la ventana mide exactamente lo que barre el cron', () => {
-    const justOut = new Date(
-      new Date('2026-08-03T13:00:00Z').getTime() + SWEEP_MINUTES * 60 * 1000,
-    );
-    assert.equal(isDue(base, justOut).due, false);
-  });
-
-  it('no dispara dos veces el mismo día local', () => {
+  it('no sale dos veces el mismo día local', () => {
     const verdict = isDue(
       { ...base, lastSentAt: new Date('2026-08-03T13:02:00Z') },
-      new Date('2026-08-03T13:10:00Z'),
+      new Date('2026-08-03T18:10:00Z'),
     );
 
     assert.equal(verdict.due, false);
     assert.equal(verdict.due === false && verdict.reason, 'ya_enviado');
   });
 
-  it('vuelve a disparar al día siguiente', () => {
+  it('vuelve a salir al día siguiente', () => {
     const verdict = isDue(
       { ...base, lastSentAt: new Date('2026-08-03T13:02:00Z') },
       new Date('2026-08-04T13:05:00Z'),
     );
 
     assert.equal(verdict.due, true);
+  });
+
+  it('el corte del duplicado usa el día local, no el del servidor', () => {
+    /*
+     * 2026-08-04T03:00:00Z sigue siendo el 3 de agosto en México. Si el corte
+     * comparara fechas UTC, este recordatorio saldría dos veces el mismo día
+     * para quien lo vive.
+     */
+    const verdict = isDue(
+      { ...base, lastSentAt: new Date('2026-08-03T13:00:00Z') },
+      new Date('2026-08-04T03:00:00Z'),
+    );
+
+    assert.equal(verdict.due, false);
+    assert.equal(verdict.due === false && verdict.reason, 'ya_enviado');
   });
 
   it('respeta los días de la semana', () => {
@@ -180,18 +192,45 @@ describe('a quién le toca en este barrido', () => {
     assert.equal(martes.due === false && martes.reason, 'otro_dia');
   });
 
-  it('un recordatorio en pausa no dispara nunca', () => {
+  it('el día de la semana se decide en la zona de la persona', () => {
+    /*
+     * 2026-08-04T03:00:00Z es martes en UTC y lunes en México. Un recordatorio
+     * de solo lunes tiene que seguir siendo de lunes para quien lo puso.
+     */
+    const soloLunes = { ...base, schedule: schedule({ days: [1] }) };
+    assert.equal(isDue(soloLunes, new Date('2026-08-04T03:00:00Z')).due, true);
+  });
+
+  it('un recordatorio en pausa no sale nunca', () => {
     const verdict = isDue({ ...base, active: false }, new Date('2026-08-03T13:00:00Z'));
     assert.equal(verdict.due, false);
     assert.equal(verdict.due === false && verdict.reason, 'inactivo');
   });
 
-  it('el mismo recordatorio dispara a distinta hora UTC según la zona', () => {
-    const tijuana = { ...base, schedule: schedule({ timeZone: 'America/Tijuana' }) };
+  it('el barrido corre a una hora razonable en el centro de México', () => {
+    const sweep = new Date(Date.UTC(2026, 7, 3, SWEEP_HOUR_UTC, 0, 0));
+    assert.equal(localPartsIn(sweep, MEXICO).hour, 7);
+  });
+});
 
-    // Las 7:00 de Tijuana (UTC-7) son las 14:00 UTC, no las 13:00.
-    assert.equal(isDue(tijuana, new Date('2026-08-03T13:00:00Z')).due, false);
-    assert.equal(isDue(tijuana, new Date('2026-08-03T14:00:00Z')).due, true);
+describe('el texto del aviso', () => {
+  /*
+   * Como el aviso no suena a la hora elegida, esa hora tiene que ir escrita:
+   * es lo que convierte el aviso en agenda del día en vez de en una
+   * notificación que llega cuando le da la gana.
+   */
+  it('lleva la hora elegida al frente', () => {
+    assert.equal(
+      digestBody({ body: 'Empezamos sin prisa.', schedule: { hour: 7, minute: 0 } }),
+      'A las 07:00 · Empezamos sin prisa.',
+    );
+  });
+
+  it('funciona sin cuerpo', () => {
+    assert.equal(
+      digestBody({ body: null, schedule: { hour: 20, minute: 30 } }),
+      'A las 20:30',
+    );
   });
 });
 

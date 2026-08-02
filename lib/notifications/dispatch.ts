@@ -1,27 +1,31 @@
 /**
  * El barrido de recordatorios. Fase 8.
  *
- * Lo llama el cron cada `SWEEP_MINUTES`. La decisión de a quién le toca vive
- * en `schedule.ts`, que es puro y está probado; aquí solo queda el orden de
- * los intentos y qué se registra.
+ * Lo llama el cron una vez al día (ver `SWEEP_HOUR_UTC`). La decisión de a
+ * quién le toca vive en `schedule.ts`, que es puro y está probado; aquí solo
+ * queda el orden de los intentos y qué se registra.
  *
  * ## El orden importa
  *
- * 1. ¿Toca ahora? Si no, se acabó, sin escribir nada.
- * 2. ¿Estamos en horas de silencio? Si sí, se registra como omitido y **se
- *    marca como enviado**. Esto último es lo que evita que el recordatorio
- *    salte en cuanto termine el silencio: nadie quiere una notificación de la
- *    rutina matutina a las siete de la tarde.
+ * 1. ¿Toca hoy? Si no, se acabó, sin escribir nada.
+ * 2. ¿La hora que la persona eligió cae en su silencio? Si sí, se registra como
+ *    omitido y **se marca como enviado**, para que no reaparezca mañana como
+ *    atrasado. Quien programa algo a las tres de la mañana y además silencia
+ *    esa franja está diciendo que no quiere que suene.
  * 3. Push a cada dispositivo. Si el servicio dice que la suscripción ya no
- *    existe, se borra la fila en vez de reintentarla cada quince minutos.
+ *    existe, se borra la fila en vez de reintentarla cada día.
  * 4. Correo solo si el push **no llegó a ningún dispositivo**. El respaldo es
  *    respaldo: recibir el mismo aviso dos veces por dos vías es ruido.
+ *
+ * ## Sobre el silencio y la hora del barrido
+ *
+ * El silencio se mide contra la **hora elegida por la persona**, nunca contra
+ * la hora a la que corre el cron. Medirlo contra la del barrido rompería el
+ * módulo entero fuera del centro de México: en Tijuana el barrido cae a las
+ * 6:00 locales, dentro del silencio nocturno por omisión, y esa persona no
+ * volvería a recibir un aviso jamás sin que nada lo indicara.
  */
-import {
-  isDue,
-  localPartsIn,
-} from './schedule';
-import { isQuietHour } from './schedule';
+import { isDue, isQuietHour } from './schedule';
 import { reminderEmail, sendEmail } from './email';
 import { sendPush, vapidFromEnv, type VapidKeys } from './webpush';
 import type { Channel } from './types';
@@ -58,9 +62,27 @@ function emptySummary(): SweepSummary {
   };
 }
 
+/**
+ * El texto del aviso, con la hora elegida al frente.
+ *
+ * Como el barrido es diario, el aviso no suena a la hora que la persona puso;
+ * escribir esa hora en el mensaje es lo que convierte el aviso en una agenda
+ * del día en vez de en una notificación que llega cuando le da la gana.
+ */
+export function digestBody(reminder: {
+  body: string | null;
+  schedule: { hour: number; minute: number };
+}): string {
+  const time = `${String(reminder.schedule.hour).padStart(2, '0')}:${String(
+    reminder.schedule.minute,
+  ).padStart(2, '0')}`;
+
+  return reminder.body ? `A las ${time} · ${reminder.body}` : `A las ${time}`;
+}
+
 /** Lo que viaja al service worker. Corto: hay un techo de 4 KB. */
-function pushPayload(title: string, body: string | null, url: string): string {
-  return JSON.stringify({ title, body: body ?? '', url });
+function pushPayload(title: string, body: string, url: string): string {
+  return JSON.stringify({ title, body, url });
 }
 
 async function deliverPush(
@@ -86,7 +108,7 @@ async function deliverPush(
     return false;
   }
 
-  const payload = pushPayload(reminder.title, reminder.body, '/');
+  const payload = pushPayload(reminder.title, digestBody(reminder), '/');
   let anyDelivered = false;
 
   for (const subscription of subscriptions) {
@@ -152,7 +174,7 @@ async function deliverEmail(
   }
 
   const result = await sendEmail(
-    reminderEmail({ to: email, title: reminder.title, body: reminder.body }),
+    reminderEmail({ to: email, title: reminder.title, body: digestBody(reminder) }),
   );
 
   if (result.ok) {
@@ -203,8 +225,7 @@ export async function runSweep(
 
     summary.disparados += 1;
 
-    const local = localPartsIn(now, reminder.schedule.timeZone);
-    if (isQuietHour(local.hour, preferences.quietHours)) {
+    if (isQuietHour(reminder.schedule.hour, preferences.quietHours)) {
       summary.omitidosPorSilencio += 1;
       await logDelivery({
         tenantId: reminder.tenantId,

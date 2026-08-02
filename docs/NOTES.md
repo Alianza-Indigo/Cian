@@ -33,21 +33,41 @@ sustituir ese archivo por `web-push` son unas quince líneas.
 **Es el pendiente más importante de esta fase.** Conviene probarlo en un
 Android instalado antes de anunciarlo a nadie.
 
-### El cron cada 15 minutos necesita plan Pro
+### Un solo barrido al día: los avisos son un resumen, no una alarma
 
-`vercel.json` declara `*/15 * * * *` para `/api/cron/recordatorios`. En el plan
-Hobby de Vercel los cron corren **una vez al día**, así que ahí el despliegue lo
-degrada o lo rechaza.
+`vercel.json` declara `0 13 * * *` para `/api/cron/recordatorios`: una vez al
+día, a las 13:00 UTC, que son las 7:00 en Ciudad de México.
 
-No se puso un barrido diario porque haría inútil la función: un recordatorio de
-rutina matutina que puede llegar con horas de retraso no es un recordatorio.
-Con `*/15` el sistema es correcto en cuanto el proyecto suba de plan, y
-mientras tanto lo que falla es visible —los recordatorios no salen— en vez de
-llegar tarde y en silencio.
+Esto **cambia lo que la aplicación puede prometer**, y el código y la interfaz
+lo dicen en vez de disimularlo. Con un solo barrido, un recordatorio no suena a
+la hora que la persona eligió: sale en el barrido. Así que los avisos son un
+resumen del día, con la hora escrita dentro del mensaje —«Rutina de la mañana ·
+A las 07:00»—, que sirve como agenda aunque no sea una alarma.
 
-`SWEEP_MINUTES` en `lib/notifications/types.ts` es la constante que amarra el
-tamaño de la ventana con la frecuencia del cron. **Cambiar el cron sin cambiar
-esa constante produce recordatorios perdidos o duplicados.**
+Dos consecuencias en el código, ambas necesarias:
+
+- **`isDue` ya no tiene ventana horaria.** Con un solo barrido, una ventana de
+  quince minutos alrededor de la hora elegida dejaría fuera a todo el mundo
+  menos a quien la puso justo a esa hora: la mayoría de los recordatorios no se
+  enviaría nunca, en silencio. La regla es de día: entra lo que toca hoy y no
+  ha salido hoy. El corte contra el duplicado sigue siendo `lastSentAt` en hora
+  local.
+- **El silencio se mide contra la hora elegida**, no contra la del barrido.
+  Medirlo contra la del barrido rompería el módulo fuera del centro de México:
+  en Tijuana el barrido cae a las 6:00 locales, dentro del silencio nocturno
+  por omisión, y esa persona no recibiría un aviso jamás sin que nada lo
+  indicara.
+
+`SWEEP_HOUR_UTC` en `lib/notifications/types.ts` documenta la hora y tiene que
+coincidir con `vercel.json`. Si algún día el proyecto sube a un plan con cron
+más frecuentes, lo que hay que cambiar es esa constante, `vercel.json` y volver
+a meter una ventana en `isDue` —además del texto de la interfaz, que hoy
+promete un resumen y pasaría a poder prometer puntualidad—.
+
+**Límite conocido:** un recordatorio de las 20:00 llega en el resumen de las
+7:00 de ese mismo día, es decir, con antelación. Es preferible a que llegue al
+día siguiente, pero no es lo que la palabra «recordatorio» sugiere. La interfaz
+lo advierte en el formulario y arriba de la pantalla.
 
 ### Correo por REST, sin SDK
 

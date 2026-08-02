@@ -14,6 +14,7 @@ import {
   DEFAULT_TIME_ZONE,
   REMINDER_KINDS,
   REMINDER_KIND_LABELS,
+  SWEEP_DESCRIPTION,
   WEEKDAY_NAMES,
 } from '../../notifications/types';
 import type { ToolContext, ToolRegistry } from './index';
@@ -27,6 +28,10 @@ import type { ToolContext, ToolRegistry } from './index';
  * La zona horaria no se le pide al modelo: sale de las preferencias de la
  * persona. Un modelo que adivina zonas horarias produce recordatorios con seis
  * horas de desfase, y quien los recibe deja de confiar en la aplicación.
+ *
+ * **El modelo tiene que decir cómo llegan de verdad.** Los avisos salen en un
+ * resumen diario, no a la hora elegida, y `createReminder` devuelve ese texto
+ * para que la respuesta no prometa una puntualidad que el sistema no da.
  */
 export function buildReminderTools({ ctx }: ToolContext): ToolRegistry {
   return {
@@ -36,6 +41,9 @@ export function buildReminderTools({ ctx }: ToolContext): ToolRegistry {
         '«avísame…» o «quiero que me lo recuerdes todos los días».\n\n' +
         'Los días de la semana van con la convención 0 = domingo. Lista vacía ' +
         'significa todos los días.\n\n' +
+        'IMPORTANTE: los avisos salen en un resumen diario por la mañana, no a ' +
+        'la hora elegida. Dilo al confirmar, con las palabras que devuelve la ' +
+        'tool en «comoLlegan». No prometas puntualidad.\n\n' +
         'Si la persona no tiene ningún canal de aviso encendido, díselo: el ' +
         'recordatorio se crea igual pero no llegará hasta que lo active en ' +
         'Configuración → Avisos.',
@@ -90,6 +98,7 @@ export function buildReminderTools({ ctx }: ToolContext): ToolRegistry {
           creado: true,
           recordatorioId: reminder.id,
           cuando: describeSchedule(reminder.schedule, WEEKDAY_NAMES),
+          comoLlegan: SWEEP_DESCRIPTION,
           tipo: REMINDER_KIND_LABELS[reminder.kind],
           // El modelo tiene que poder avisar con honestidad de que no llegará.
           advertencia: noChannels
@@ -119,6 +128,7 @@ export function buildReminderTools({ ctx }: ToolContext): ToolRegistry {
             tipo: REMINDER_KIND_LABELS[reminder.kind],
             activo: reminder.active,
           })),
+          comoLlegan: SWEEP_DESCRIPTION,
           canalesEncendidos: preferences.channels,
           horasDeSilencio: `De ${preferences.quietHours.startHour}:00 a ${preferences.quietHours.endHour}:00`,
         };
