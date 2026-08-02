@@ -42,9 +42,16 @@ export default async function EspacioPage({
       grant={{
         plan: detail.grant.plan,
         limits: detail.grant.limits,
+        mode: detail.grant.mode,
         note: detail.grant.note,
         grantedAt: detail.grant.grantedAt?.toISOString() ?? null,
       }}
+      invitations={detail.invitations.map((invitation) => ({
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt.toISOString(),
+      }))}
       members={detail.members}
       professionals={detail.professionals.map((professional) => ({
         id: professional.id,

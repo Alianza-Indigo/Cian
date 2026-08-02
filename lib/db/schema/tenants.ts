@@ -7,6 +7,7 @@
  * `tenant_members`.
  */
 import {
+  boolean,
   index,
   jsonb,
   pgEnum,
@@ -71,13 +72,20 @@ export const tenants = pgTable(
      * error y sin aviso, y el espacio perdería lo que se le concedió sin que
      * nadie se enterara. Guardada aquí, sobrevive.
      *
-     * La concesión **solo suma**: se aplica cuando es más generosa que el plan
-     * pagado, nunca cuando es menor. Así, un descuido en esta pantalla no puede
-     * quitarle a nadie lo que está pagando. Para bajar de plan se toca Stripe,
-     * que es donde vive el dinero; para retirar un regalo, basta con quitarlo.
+     * Por omisión la concesión **solo suma**: se aplica cuando es más generosa
+     * que el plan pagado, nunca cuando es menor. Así, un descuido en esta
+     * pantalla no puede quitarle a nadie lo que está pagando.
+     *
+     * `platform_override` levanta esa red. Con él, lo concedido **sustituye** a
+     * lo que se paga, también hacia abajo. Existe porque la plataforma tiene que
+     * poder contener un espacio que está haciendo daño sin esperar a que un
+     * cobro se cancele en Stripe. No es el modo por omisión y la pantalla lo
+     * pide aparte, porque activarlo sin querer sí puede quitarle a alguien lo
+     * que compró.
      */
     platformPlan: tenantPlanEnum('platform_plan'),
     platformLimits: jsonb('platform_limits').$type<Partial<PlanLimits>>(),
+    platformOverride: boolean('platform_override').notNull().default(false),
     /** Por qué se concedió. Lo lee quien venga después a preguntarse por qué. */
     platformNote: text('platform_note'),
     platformGrantedAt: timestamp('platform_granted_at', {

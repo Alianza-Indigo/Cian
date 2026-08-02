@@ -155,6 +155,13 @@
       "when": 1785696587769,
       "tag": "0021_lowly_madame_web",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785699741780,
+      "tag": "0022_careful_the_renegades",
+      "breakpoints": true
     }
   ]
 }

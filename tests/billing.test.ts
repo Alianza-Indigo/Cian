@@ -23,6 +23,7 @@ import {
   nextPlan,
   resolveLimits,
   sanitizeGrantedLimits,
+  GRANT_MODES,
 } from '../lib/billing/limits';
 import {
   DEFAULT_PLAN_LIMITS,
@@ -565,5 +566,78 @@ describe('una concesión se sanea antes de guardarse', () => {
 
   it('un negativo no se convierte en un tope imposible de cumplir', () => {
     assert.equal(sanitizeGrantedLimits({ documentos: -5 })?.documentos, 0);
+  });
+});
+
+/**
+ * El modo `sustituye`.
+ *
+ * Es el único control de toda la administración de plataforma que puede dejar a
+ * un espacio con **menos** de lo que tenía. Existe a propósito —la plataforma
+ * tiene que poder contener un espacio que hace daño sin esperar a que se
+ * cancele un cobro en Stripe— y por eso mismo conviene que su comportamiento
+ * esté clavado: si un día `suma` empezara a comportarse como `sustituye`, el
+ * daño llegaría en silencio a espacios que no lo pidieron.
+ */
+describe('el modo sustituye sí puede bajar', () => {
+  it('baja el plan por debajo de lo que se paga', () => {
+    assert.equal(effectivePlan('organization', 'free', 'sustituye'), 'free');
+    assert.equal(effectivePlan('personal', 'free', 'sustituye'), 'free');
+  });
+
+  it('sin concesión no baja nada, ni en este modo', () => {
+    // Que el modo esté activo no significa nada si no hay nada concedido.
+    for (const plan of PLANS) {
+      assert.equal(effectivePlan(plan, null, 'sustituye'), plan);
+    }
+  });
+
+  it('baja un límite por debajo del que da el plan', () => {
+    const limits = grantLimits(
+      DEFAULT_PLAN_LIMITS.personal,
+      { mensajes: 10 },
+      'sustituye',
+    );
+
+    assert.equal(limits.mensajes, 10);
+  });
+
+  it('le pone tope a un plan que no lo tenía', () => {
+    const limits = grantLimits(
+      DEFAULT_PLAN_LIMITS.organization,
+      { mensajes: 100 },
+      'sustituye',
+    );
+
+    assert.equal(limits.mensajes, 100);
+  });
+
+  it('lo que la concesión no menciona sigue viniendo del plan', () => {
+    // Sustituir lo escrito, no borrar todo lo demás. Un campo en `undefined`
+    // se comportaría como «sin límite» y abriría la puerta sin que nadie lo
+    // pidiera.
+    const base = DEFAULT_PLAN_LIMITS.personal;
+    const limits = grantLimits(base, { mensajes: 10 }, 'sustituye');
+
+    assert.equal(limits.documentos, base.documentos);
+    assert.equal(limits.almacenamiento, base.almacenamiento);
+    assert.equal(limits.equipo_de_apoyo, base.equipo_de_apoyo);
+    assert.equal(limits.asientos, base.asientos);
+    assert.notEqual(limits.documentos, undefined);
+  });
+
+  it('el modo por omisión sigue siendo el que no puede quitar', () => {
+    // Llamar sin modo tiene que comportarse como `suma`. Si un día el valor
+    // por omisión cambiara, todas las concesiones existentes empezarían a
+    // poder bajar sin que nadie tocara nada.
+    assert.equal(effectivePlan('organization', 'free'), 'organization');
+    assert.equal(
+      grantLimits(DEFAULT_PLAN_LIMITS.personal, { mensajes: 10 }).mensajes,
+      DEFAULT_PLAN_LIMITS.personal.mensajes,
+    );
+  });
+
+  it('solo hay dos modos y `suma` es uno de ellos', () => {
+    assert.deepEqual([...GRANT_MODES], ['suma', 'sustituye']);
   });
 });

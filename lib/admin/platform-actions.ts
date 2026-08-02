@@ -10,6 +10,8 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
+  cancelInvitationAnywhere,
+  inviteToSpaceAnywhere,
   removeMemberAnywhere,
   setMemberRoleAnywhere,
   setPlatformGrant,
@@ -18,9 +20,14 @@ import {
 import { VERIFICATION_STATUSES } from '../consultorio/types';
 import { MEMBER_ROLES } from '../tenant/guard';
 import { PLANS } from '../billing/types';
+import { GRANT_MODES } from '../billing/limits';
+import { INVITABLE_ROLES } from '../tenant/roles';
+import { requestBaseUrl } from '../http/base-url';
+import { auth } from '../auth';
+import { sendEmail, tenantInvitationEmail } from '../notifications/email';
 
 export type PlatformActionResult =
-  | { ok: true; message?: string }
+  | { ok: true; message?: string; inviteUrl?: string }
   | { ok: false; error: string };
 
 const verifySchema = z.object({
@@ -146,6 +153,7 @@ const limiteSchema = z.union([
 const grantSchema = z.object({
   tenantId: z.uuid(),
   plan: z.union([z.literal(''), z.enum(PLANS)]),
+  mode: z.enum(GRANT_MODES).default('suma'),
   note: z.string().max(500).optional(),
   mensajes: limiteSchema.optional(),
   documentos: limiteSchema.optional(),
@@ -173,7 +181,7 @@ export async function setGrantFromPlatformAction(
   const parsed = grantSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Revisa los valores.' };
 
-  const { tenantId, plan, note, asientos, ...resto } = parsed.data;
+  const { tenantId, plan, mode, note, asientos, ...resto } = parsed.data;
 
   const limits = {
     mensajes: traducir(resto.mensajes),
@@ -193,6 +201,7 @@ export async function setGrantFromPlatformAction(
     await setPlatformGrant(tenantId, {
       plan: plan === '' ? null : plan,
       limits: Object.keys(definidos).length === 0 ? null : definidos,
+      mode,
       note: note ?? null,
     });
 
@@ -211,6 +220,106 @@ export async function setGrantFromPlatformAction(
       ok: false,
       error:
         error instanceof Error ? error.message : 'No pudimos guardar la concesión.',
+    };
+  }
+}
+
+// --- Invitar a un espacio ajeno -----------------------------------------------
+
+const inviteSchema = z.object({
+  tenantId: z.uuid(),
+  email: z.email().max(320),
+  role: z.enum(INVITABLE_ROLES),
+});
+
+/**
+ * Invita a alguien a un espacio ajeno.
+ *
+ * Cierra el otro extremo del caso sin salida: en un espacio que se quedó sin
+ * nadie que administre no siempre queda alguien dentro a quien ascender. Aquí
+ * se mete a la persona y después se le da el rol con `setRoleFromPlatformAction`.
+ *
+ * Como en las invitaciones de siempre: si el correo no está configurado, la
+ * invitación se crea igual y se devuelve el enlace para pasarlo a mano. Que no
+ * haya Resend no puede dejar un espacio bloqueado.
+ */
+export async function inviteFromPlatformAction(
+  input: unknown,
+): Promise<PlatformActionResult> {
+  const parsed = inviteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Revisa el correo y el rol.' };
+
+  try {
+    const [invitation, session] = await Promise.all([
+      inviteToSpaceAnywhere(parsed.data.tenantId, {
+        email: parsed.data.email,
+        role: parsed.data.role,
+      }),
+      auth(),
+    ]);
+
+    const inviteUrl = `${await requestBaseUrl()}/unirme/${invitation.token}`;
+
+    revalidatePath(`/admin/espacios/${parsed.data.tenantId}`);
+
+    const delivery = await sendEmail(
+      tenantInvitationEmail({
+        to: invitation.email,
+        inviterName: session?.user?.name ?? 'Alguien',
+        acceptUrl: inviteUrl,
+      }),
+    );
+
+    if (delivery.ok) {
+      return { ok: true, message: `Invitación enviada a ${invitation.email}.` };
+    }
+
+    return {
+      ok: true,
+      message: delivery.configured
+        ? 'No pudimos enviar el correo. Comparte este enlace tú:'
+        : 'El envío de correo no está configurado. Comparte este enlace tú:',
+      inviteUrl,
+    };
+  } catch (error) {
+    const mensaje =
+      error instanceof Error ? error.message : 'No pudimos invitar.';
+
+    /*
+     * Si el espacio se quedó sin asientos, el mensaje de siempre manda a
+     * «Membresía» —a comprar—, que desde plataforma es el consejo equivocado:
+     * aquí los asientos se suben en la misma pantalla, gratis y en un clic.
+     */
+    if (mensaje.includes('asiento')) {
+      return {
+        ok: false,
+        error:
+          `${mensaje} Desde aquí también puedes subirle los asientos en ` +
+          '«Plan y límites de este espacio», sin pasar por Stripe.',
+      };
+    }
+
+    return { ok: false, error: mensaje };
+  }
+}
+
+const cancelSchema = z.object({ tenantId: z.uuid(), invitationId: z.uuid() });
+
+export async function cancelInvitationFromPlatformAction(
+  input: unknown,
+): Promise<PlatformActionResult> {
+  const parsed = cancelSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invitación no válida.' };
+
+  try {
+    await cancelInvitationAnywhere(parsed.data.tenantId, parsed.data.invitationId);
+
+    revalidatePath(`/admin/espacios/${parsed.data.tenantId}`);
+    return { ok: true, message: 'Invitación cancelada. El enlace ya no sirve.' };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'No pudimos cancelarla.',
     };
   }
 }

@@ -40,12 +40,20 @@
  * administrar. La misma prueba de arriba falla si se añade una operación de
  * escritura que no pase por ahí.
  *
- * ## Lo que se concede no puede quitar
+ * ## Conceder plan y límites, y los dos modos
  *
- * `setPlatformGrant` regala plan y límites sin tocar Stripe, y **solo suma**: se
- * aplica cuando es más generoso que lo que el espacio ya paga. Equivocarse en
- * esa pantalla no puede dejar a nadie con menos de lo que compró. La regla vive
- * en `lib/billing/limits.ts`, que es puro y está probado frontera por frontera.
+ * `setPlatformGrant` da plan y límites a un espacio sin tocar Stripe. Por
+ * omisión **solo suma**: se aplica cuando es más generoso que lo que el espacio
+ * ya paga, así que equivocarse en esa pantalla no deja a nadie con menos de lo
+ * que compró.
+ *
+ * El modo `sustituye` levanta esa red y también puede bajar. Existe porque la
+ * plataforma tiene que poder contener un espacio que está haciendo daño sin
+ * esperar a que un cobro se cancele en Stripe. Se pide aparte, en su propio
+ * control, porque activarlo sin querer sí quita.
+ *
+ * Las dos reglas viven en `lib/billing/limits.ts`, que es puro y está probado
+ * frontera por frontera.
  */
 import { and, count, desc, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
@@ -58,8 +66,18 @@ import {
   type LicenseDoc,
 } from '../db/schema/consultorio';
 import { auditLog } from '../db/schema/audit';
-import { changeMemberRole, removeMember } from '../db/repositories/memberships';
-import { effectivePlan, sanitizeGrantedLimits } from '../billing/limits';
+import {
+  cancelInvitation,
+  changeMemberRole,
+  inviteToTenant,
+  listInvitations,
+  removeMember,
+} from '../db/repositories/memberships';
+import {
+  effectivePlan,
+  sanitizeGrantedLimits,
+  type GrantMode,
+} from '../billing/limits';
 import { assertSuperadmin } from './access';
 import type { MemberRole, TenantContext } from '../tenant/guard';
 import type { Plan, PlanLimits } from '../billing/types';
@@ -91,6 +109,7 @@ export async function listSpaces(): Promise<SpaceSummary[]> {
       slug: tenants.slug,
       plan: tenants.plan,
       platformPlan: tenants.platformPlan,
+      platformOverride: tenants.platformOverride,
       createdAt: tenants.createdAt,
     })
     .from(tenants)
@@ -136,12 +155,16 @@ export async function listSpaces(): Promise<SpaceSummary[]> {
   const porProfesionales = mapa(profesionales);
   const porCitas = mapa(citas);
 
-  return filas.map(({ platformPlan, ...fila }) => ({
+  return filas.map(({ platformPlan, platformOverride, ...fila }) => ({
     ...fila,
     // El plan que se ve en la lista es el que la gente tiene de verdad, con la
     // concesión ya aplicada. Ver un `free` en un espacio al que se le abrió el
     // plan sería contar una cosa distinta de la que pasa.
-    plan: effectivePlan(fila.plan, platformPlan),
+    plan: effectivePlan(
+      fila.plan,
+      platformPlan,
+      platformOverride ? 'sustituye' : 'suma',
+    ),
     granted: platformPlan !== null,
     members: porMiembros.get(fila.id) ?? 0,
     professionals: porProfesionales.get(fila.id) ?? 0,
@@ -196,10 +219,19 @@ export type SpaceDetail = {
   paidPlan: Plan;
   /** Lo que la plataforma le regaló a este espacio, si algo. */
   grant: PlatformGrant;
+  /** Invitaciones sin aceptar, para poder cancelarlas desde aquí. */
+  invitations: SpaceInvitation[];
+};
+
+export type SpaceInvitation = {
+  id: string;
+  email: string;
+  role: MemberRole;
+  expiresAt: Date;
 };
 
 export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null> {
-  await assertSuperadmin('spaceDetail');
+  const admin = await assertSuperadmin('spaceDetail');
 
   const [space] = await db
     .select()
@@ -209,7 +241,8 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
 
   if (!space) return null;
 
-  const [miembros, perfiles, citas, totalCitas, suscripcion] = await Promise.all([
+  const [miembros, perfiles, citas, totalCitas, suscripcion, invitaciones] =
+    await Promise.all([
     db
       .select({
         userId: tenantMembers.userId,
@@ -271,6 +304,7 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
       .from(subscriptions)
       .where(eq(subscriptions.tenantId, tenantId))
       .limit(1),
+    listInvitations(contextoDe(tenantId, admin.ctx.userId)),
   ]);
 
   const nombrePorUsuario = new Map(
@@ -282,10 +316,17 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
   const pagado = suscripcion[0]?.plan ?? space.plan;
 
   return {
+    invitations: invitaciones.map((fila) => ({
+      id: fila.id,
+      email: fila.email,
+      role: fila.role,
+      expiresAt: fila.expiresAt,
+    })),
     paidPlan: pagado,
     grant: {
       plan: space.platformPlan,
       limits: space.platformLimits,
+      mode: space.platformOverride ? 'sustituye' : 'suma',
       note: space.platformNote,
       grantedAt: space.platformGrantedAt,
     },
@@ -293,8 +334,11 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
       id: space.id,
       name: space.name,
       slug: space.slug,
-      // El que vale es el mayor de los dos: la concesión solo suma.
-      plan: effectivePlan(pagado, space.platformPlan),
+      plan: effectivePlan(
+        pagado,
+        space.platformPlan,
+        space.platformOverride ? 'sustituye' : 'suma',
+      ),
       members: miembros.filter((m) => m.status === 'active').length,
       professionals: perfiles.length,
       appointments: totalCitas[0]?.total ?? 0,
@@ -500,11 +544,66 @@ export async function removeMemberAnywhere(
   });
 }
 
+// --- Invitaciones a cualquier espacio ----------------------------------------
+
+/**
+ * Invita a alguien a un espacio ajeno.
+ *
+ * Cierra el otro extremo del caso que resolvía `setMemberRoleAnywhere`: en un
+ * espacio que se quedó sin nadie que administre no basta con poder cambiar
+ * roles, porque a veces no queda **nadie dentro** a quien ascender. Aquí se
+ * mete a la persona nueva y luego se le da el rol que toque.
+ *
+ * Se apoya en `inviteToTenant`, así que la invitación caduca igual, cuenta
+ * asiento igual y llega por correo igual. Lo único distinto es quién la manda.
+ *
+ * `owner` no se invita por correo, tampoco desde plataforma: es demasiado poder
+ * viajando en un enlace que puede reenviarse. Se invita como `admin` y se le
+ * sube el rol con `setMemberRoleAnywhere`, que ya existe y queda registrado.
+ */
+export async function inviteToSpaceAnywhere(
+  tenantId: string,
+  input: { email: string; role: MemberRole },
+): Promise<{ invitationId: string; email: string; token: string }> {
+  const admin = await assertSuperadmin('inviteToSpaceAnywhere');
+
+  const { invitation, token } = await inviteToTenant(
+    contextoDe(tenantId, admin.ctx.userId),
+    input,
+  );
+
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
+    action: 'plataforma.invitacion',
+    entity: 'tenant_invitation',
+    entityId: invitation.id,
+    metadata: { role: invitation.role },
+  });
+
+  return { invitationId: invitation.id, email: invitation.email, token };
+}
+
+export async function cancelInvitationAnywhere(
+  tenantId: string,
+  invitationId: string,
+): Promise<void> {
+  const admin = await assertSuperadmin('cancelInvitationAnywhere');
+
+  await cancelInvitation(contextoDe(tenantId, admin.ctx.userId), invitationId);
+
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
+    action: 'plataforma.invitacion_cancelada',
+    entity: 'tenant_invitation',
+    entityId: invitationId,
+  });
+}
+
 // --- Plan y límites de un espacio --------------------------------------------
 
 export type PlatformGrant = {
   plan: Plan | null;
   limits: Partial<PlanLimits> | null;
+  /** `suma` regala capacidad; `sustituye` también puede bajarla. */
+  mode: GrantMode;
   note: string | null;
   grantedAt: Date | null;
 };
@@ -528,7 +627,12 @@ export type PlatformGrant = {
  */
 export async function setPlatformGrant(
   tenantId: string,
-  grant: { plan: Plan | null; limits: Partial<PlanLimits> | null; note: string | null },
+  grant: {
+    plan: Plan | null;
+    limits: Partial<PlanLimits> | null;
+    mode: GrantMode;
+    note: string | null;
+  },
 ): Promise<void> {
   const admin = await assertSuperadmin('setPlatformGrant');
 
@@ -548,6 +652,8 @@ export async function setPlatformGrant(
     .set({
       platformPlan: grant.plan,
       platformLimits: limits,
+      // Sin nada concedido, el modo no significa nada: se apaga con lo demás.
+      platformOverride: vacia ? false : grant.mode === 'sustituye',
       platformNote: vacia ? null : (grant.note?.trim().slice(0, 500) || null),
       platformGrantedAt: vacia ? null : new Date(),
       platformGrantedBy: vacia ? null : admin.ctx.userId,
@@ -558,7 +664,7 @@ export async function setPlatformGrant(
     action: vacia ? 'plataforma.concesion_retirada' : 'plataforma.concesion',
     entity: 'tenant',
     entityId: tenantId,
-    metadata: { plan: grant.plan, limits },
+    metadata: { plan: grant.plan, limits, modo: vacia ? null : grant.mode },
   });
 }
 

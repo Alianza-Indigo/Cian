@@ -147,12 +147,55 @@ Comprobado que falla de verdad quitándole el registro a `setPlatformGrant`:
 `estas operaciones cambian algo en un espacio ajeno sin dejar constancia:
 setPlatformGrant`.
 
+### Los dos casos que faltaban, y por qué se hicieron
+
+Dejé anotados dos límites como si fueran decisiones cerradas. La respuesta fue
+**«la plataforma debe ser flexible, agrega esos 2 casos»**, y es la segunda vez
+en la misma sesión que convierto en principio algo que solo era mi criterio. La
+diferencia entre «no se puede porque haría daño» y «no se puede porque yo no lo
+hice» hay que decirla, no dejarla implícita.
+
+**1. Bajar por debajo de lo que se paga: el modo `sustituye`.**
+
+La concesión ahora tiene dos modos. `suma` es el de siempre y el de por omisión:
+regala capacidad y no puede quitar. `sustituye` reemplaza lo que el espacio
+tiene, también hacia abajo.
+
+El caso real que lo justifica no es administrativo, es de contención: si un
+espacio está haciendo daño, esperar a que se cancele un cobro en Stripe no
+siempre es una opción. La red no desaparece, se levanta a mano: el modo es un
+control aparte, la pantalla dice qué hace, y al guardar pregunta una vez con el
+nombre del espacio delante.
+
+En `sustituye`, lo que la concesión no menciona sigue viniendo del plan
+(`mergeOver`). Sustituir lo escrito, no borrar lo demás: un campo en `undefined`
+se comportaría como «sin límite» y abriría la puerta sin que nadie lo pidiera.
+
+Hay una prueba explícita de que **el modo por omisión sigue siendo el que no
+puede quitar**. Si un día ese valor cambiara, todas las concesiones existentes
+empezarían a poder bajar sin que nadie tocara nada.
+
+**2. Invitar a un espacio ajeno.**
+
+Poder cambiar roles no bastaba: a veces no queda **nadie dentro** a quien
+ascender. `inviteToSpaceAnywhere` se apoya en `inviteToTenant`, así que la
+invitación caduca igual, ocupa asiento igual y llega por correo igual; lo único
+distinto es quién la manda. También se listan y se cancelan las pendientes.
+
+`owner` sigue sin invitarse por correo, y esta vez la razón sí es de daño y no
+de alcance: es demasiado poder viajando en un enlace que puede reenviarse. El
+camino existe y es de dos pasos —invitar como `admin`, subir el rol cuando
+acepte—, ambos registrados.
+
+Detalle que se vio al probarlo: si el espacio está sin asientos, el mensaje de
+`checkSeats` manda a «Membresía», que desde plataforma es el consejo equivocado
+—ahí se compra, aquí se concede gratis en la misma pantalla—. La acción detecta
+ese caso y añade la salida que sí aplica.
+
 ### Lo que sigue sin poder hacerse desde plataforma
 
-- **Bajar el plan de un espacio por debajo de lo que paga.** Es deliberado, no
-  un pendiente: eso se hace en Stripe.
-- **Invitar a alguien a un espacio ajeno.** Se pueden cambiar roles y retirar,
-  pero no mandar la invitación. No apareció ningún caso que lo pidiera.
+Nada de operación. Lo único que queda fuera es el contenido clínico privado, que
+es la línea de arriba y esa no se mueve.
 
 ---
 

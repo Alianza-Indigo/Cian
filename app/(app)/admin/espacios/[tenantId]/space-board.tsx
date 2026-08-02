@@ -21,6 +21,14 @@ import {
 import { ROLE_LABELS } from '@/lib/tenant/roles';
 import { MEMBER_ROLES, type MemberRole } from '@/lib/tenant/guard';
 import {
+  GRANT_MODES,
+  GRANT_MODE_LABELS,
+  type GrantMode,
+} from '@/lib/billing/limits';
+import { INVITABLE_ROLES, ROLE_HINTS } from '@/lib/tenant/roles';
+import {
+  cancelInvitationFromPlatformAction,
+  inviteFromPlatformAction,
   removeMemberFromPlatformAction,
   setGrantFromPlatformAction,
   setRoleFromPlatformAction,
@@ -57,8 +65,16 @@ type Appointment = {
 type Grant = {
   plan: Plan | null;
   limits: Partial<PlanLimits> | null;
+  mode: GrantMode;
   note: string | null;
   grantedAt: string | null;
+};
+
+type Invitation = {
+  id: string;
+  email: string;
+  role: MemberRole;
+  expiresAt: string;
 };
 
 const selectClass =
@@ -127,6 +143,7 @@ export function SpaceBoard({
   plan,
   paidPlan,
   grant,
+  invitations,
   members,
   professionals,
   appointments,
@@ -136,16 +153,23 @@ export function SpaceBoard({
   plan: Plan;
   paidPlan: Plan;
   grant: Grant;
+  invitations: Invitation[];
   members: Member[];
   professionals: Professional[];
   appointments: Appointment[];
 }) {
   const router = useRouter();
   const [status, setStatus] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
   const [isPending, startTransition] = useTransition();
 
   function run(
-    action: () => Promise<{ ok: boolean; message?: string; error?: string }>,
+    action: () => Promise<{
+      ok: boolean;
+      message?: string;
+      error?: string;
+      inviteUrl?: string;
+    }>,
   ) {
     startTransition(async () => {
       const result = await action();
@@ -154,15 +178,25 @@ export function SpaceBoard({
           ? (result.message ?? 'Listo.')
           : (result.error ?? 'Algo salió mal.'),
       );
+      // Cuando el correo no está configurado, el enlace es la única forma de
+      // que esa persona entre. Se enseña hasta que se haga otra cosa.
+      setInviteUrl(result.inviteUrl ?? '');
       if (result.ok) router.refresh();
     });
   }
 
   return (
     <div style={{ display: 'grid', gap: 'var(--cian-section-gap)' }}>
-      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-        {isPending ? 'Guardando…' : status}
-      </p>
+      <div role="status" aria-live="polite">
+        <p className="text-sm text-muted-foreground">
+          {isPending ? 'Guardando…' : status}
+        </p>
+        {inviteUrl ? (
+          <p className="mt-1 break-all text-sm">
+            <code>{inviteUrl}</code>
+          </p>
+        ) : null}
+      </div>
 
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{name}</h2>
@@ -185,20 +219,34 @@ export function SpaceBoard({
           límite puntual, sin montar un cobro. No pasa por Stripe y no caduca.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Lo que concedas <strong>solo suma</strong>: se aplica cuando es más
-          generoso que lo que este espacio ya paga ({PLAN_LABELS[paidPlan]}),
-          nunca cuando es menor. Así, equivocarte aquí no puede quitarle a nadie
-          lo que está pagando. Para bajar de plan se cambia la suscripción en
-          Stripe; para retirar lo concedido, vacía los campos y guarda.
+          Este espacio paga <strong>{PLAN_LABELS[paidPlan]}</strong>. Con{' '}
+          <em>solo suma</em>, lo que concedas se aplica cuando es más generoso
+          que eso y nunca cuando es menor, así que equivocarte no puede quitarle
+          nada. Con <em>sustituye</em> manda lo que pongas, también hacia abajo.
+          Para retirar la concesión entera, vacía los campos y guarda.
         </p>
 
         <Card className="mt-3">
           <form
-            action={(formData) =>
+            action={(formData) => {
+              /*
+               * «Sustituye» es lo único de esta pantalla que puede dejar a un
+               * espacio con menos de lo que tenía. Se pregunta una vez, con el
+               * nombre del espacio delante, para que no pase por descuido.
+               */
+              if (formData.get('mode') === 'sustituye') {
+                const seguro = confirm(
+                  `«Sustituye» reemplaza lo que ${name} tiene, también hacia ` +
+                    'abajo. ¿Continuar?',
+                );
+                if (!seguro) return;
+              }
+
               run(() =>
                 setGrantFromPlatformAction({
                   tenantId,
                   plan: formData.get('plan'),
+                  mode: formData.get('mode'),
                   note: formData.get('note'),
                   mensajes: formData.get('mensajes'),
                   documentos: formData.get('documentos'),
@@ -207,27 +255,49 @@ export function SpaceBoard({
                   equipo_de_apoyo: formData.get('equipo_de_apoyo'),
                   asientos: formData.get('asientos'),
                 }),
-              )
-            }
+              );
+            }}
             style={{ display: 'grid', gap: 'var(--cian-gap)' }}
           >
-            <label className="block text-sm">
-              <span className="font-medium">Plan concedido</span>
-              <select
-                name="plan"
-                defaultValue={grant.plan ?? ''}
-                disabled={isPending}
-                className={`${selectClass} mt-1 block w-full`}
-                style={{ minHeight: 'var(--cian-control-height)' }}
-              >
-                <option value="">Ninguno — lo que pague</option>
-                {PLANS.map((value) => (
-                  <option key={value} value={value}>
-                    {PLAN_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="font-medium">Plan concedido</span>
+                <select
+                  name="plan"
+                  defaultValue={grant.plan ?? ''}
+                  disabled={isPending}
+                  className={`${selectClass} mt-1 block w-full`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                >
+                  <option value="">Ninguno — lo que pague</option>
+                  {PLANS.map((value) => (
+                    <option key={value} value={value}>
+                      {PLAN_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm">
+                <span className="font-medium">Cómo se aplica</span>
+                <select
+                  name="mode"
+                  defaultValue={grant.mode}
+                  disabled={isPending}
+                  className={`${selectClass} mt-1 block w-full`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                >
+                  {GRANT_MODES.map((value) => (
+                    <option key={value} value={value}>
+                      {GRANT_MODE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  «Sustituye» también puede bajar lo que este espacio tiene.
+                </span>
+              </label>
+            </div>
 
             <fieldset
               className="grid gap-3 sm:grid-cols-2"
@@ -495,6 +565,119 @@ export function SpaceBoard({
               </li>
             ))}
           </ul>
+        </Card>
+      </section>
+
+      {/* --- Invitar a este espacio ------------------------------------------- */}
+      <section aria-labelledby="invitar">
+        <h3 id="invitar" className="text-lg font-semibold tracking-tight">
+          Invitar a este espacio
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Para cuando no queda nadie dentro a quien ascender: metes a la persona
+          y luego le das el rol que toque, arriba. La invitación caduca y ocupa
+          asiento igual que cualquier otra.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          <strong>Propietaria</strong> no se manda por correo —es demasiado
+          poder viajando en un enlace que puede reenviarse—. Invita como quien
+          administra y súbele el rol cuando acepte.
+        </p>
+
+        <Card className="mt-3">
+          <form
+            action={(formData) =>
+              run(() =>
+                inviteFromPlatformAction({
+                  tenantId,
+                  email: formData.get('email'),
+                  role: formData.get('role'),
+                }),
+              )
+            }
+            style={{ display: 'grid', gap: 'var(--cian-gap)' }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="font-medium">Correo</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  maxLength={320}
+                  disabled={isPending}
+                  className={`${inputClass} mt-1 block w-full`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                />
+              </label>
+
+              <label className="block text-sm">
+                <span className="font-medium">Rol</span>
+                <select
+                  name="role"
+                  defaultValue="admin"
+                  disabled={isPending}
+                  className={`${selectClass} mt-1 block w-full`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                >
+                  {INVITABLE_ROLES.map((value) => (
+                    <option key={value} value={value}>
+                      {ROLE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {ROLE_HINTS.admin}
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              >
+                Enviar invitación
+              </button>
+            </div>
+          </form>
+
+          {invitations.length > 0 ? (
+            <ul className="mt-4 space-y-2 border-t border-border pt-4">
+              {invitations.map((invitation) => (
+                <li
+                  key={invitation.id}
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                >
+                  <span className="min-w-0">
+                    {invitation.email}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {ROLE_LABELS[invitation.role]} · caduca el{' '}
+                      {fechaHora.format(new Date(invitation.expiresAt))}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() =>
+                      run(() =>
+                        cancelInvitationFromPlatformAction({
+                          tenantId,
+                          invitationId: invitation.id,
+                        }),
+                      )
+                    }
+                    className="inline-flex items-center rounded-lg border border-border px-3 text-sm hover:bg-muted focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                    style={{ minHeight: 'var(--cian-control-height)' }}
+                  >
+                    Cancelar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Card>
       </section>
 

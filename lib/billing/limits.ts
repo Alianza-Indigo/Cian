@@ -131,7 +131,21 @@ export function resolveLimits(
   plan: Plan,
   overrides: Partial<PlanLimits> | null | undefined,
 ): PlanLimits {
-  const base = DEFAULT_PLAN_LIMITS[plan];
+  return mergeOver(DEFAULT_PLAN_LIMITS[plan], overrides);
+}
+
+/**
+ * Campo a campo: lo que traiga `overrides` manda, lo que no, viene de `base`.
+ *
+ * Está separado de `resolveLimits` porque lo usan dos cosas distintas —la tabla
+ * `plan_limits` y las concesiones que sustituyen— y en ambas el peligro es el
+ * mismo: dejar un campo en `undefined`, que no es `null` pero se comportaría
+ * como «sin límite».
+ */
+function mergeOver(
+  base: PlanLimits,
+  overrides: Partial<PlanLimits> | null | undefined,
+): PlanLimits {
   if (!overrides) return base;
 
   const pick = <K extends keyof PlanLimits>(key: K): PlanLimits[K] => {
@@ -163,38 +177,69 @@ const PLAN_RANK: Record<Plan, number> = {
 };
 
 /**
- * El plan que vale: el pagado o el concedido, el que sea mayor.
+ * Cómo se aplica una concesión de plataforma.
  *
- * **La concesión solo suma.** Si un espacio paga `organization` y alguien le
- * concede `personal` por error, sigue teniendo `organization`. Esa regla no es
- * una cortesía: es lo que hace que equivocarse en la pantalla de plataforma no
- * pueda quitarle a nadie lo que está pagando.
+ * `suma` es el modo por omisión y el que se usa el 99% de las veces: regalar
+ * capacidad. `sustituye` es para cuando la plataforma necesita **bajar** lo que
+ * un espacio tiene sin esperar a que se cancele un cobro en Stripe.
  *
- * Para bajar de plan se cambia la suscripción en Stripe, que es donde vive el
- * dinero. Para retirar una concesión basta con quitarla, y entonces el espacio
- * vuelve exactamente a lo que paga.
+ * Se nombran los dos en vez de usar un booleano suelto porque en la pantalla
+ * hay que poder leer cuál está activo sin adivinar qué significa `true`.
  */
-export function effectivePlan(paid: Plan, granted: Plan | null): Plan {
+export const GRANT_MODES = ['suma', 'sustituye'] as const;
+export type GrantMode = (typeof GRANT_MODES)[number];
+
+export const GRANT_MODE_LABELS: Record<GrantMode, string> = {
+  suma: 'Solo suma',
+  sustituye: 'Sustituye lo que paga',
+};
+
+/**
+ * El plan que vale.
+ *
+ * En modo `suma` —el de siempre— se queda el mayor de los dos: si un espacio
+ * paga `organization` y alguien le concede `personal` por error, sigue teniendo
+ * `organization`. Esa red es lo que hace que equivocarse en la pantalla de
+ * plataforma no le quite a nadie lo que compró.
+ *
+ * En modo `sustituye` manda lo concedido, también hacia abajo. Es deliberado y
+ * se pide aparte: la plataforma tiene que poder contener un espacio que está
+ * haciendo daño, y esperar a que un cobro se cancele en Stripe no siempre es
+ * una opción.
+ *
+ * Sin concesión, en cualquier modo, manda lo que se paga.
+ */
+export function effectivePlan(
+  paid: Plan,
+  granted: Plan | null,
+  mode: GrantMode = 'suma',
+): Plan {
   if (!granted) return paid;
+  if (mode === 'sustituye') return granted;
   return PLAN_RANK[granted] > PLAN_RANK[paid] ? granted : paid;
 }
 
 /**
- * Aplica una concesión de límites sobre los del plan, **solo hacia arriba**.
+ * Aplica una concesión de límites sobre los del plan.
  *
- * `null` es «sin límite», así que gana a cualquier número por grande que sea.
- * Un `null` en el plan no lo baja ninguna concesión: ya es lo más generoso que
- * existe.
+ * En modo `suma`, solo hacia arriba: `null` es «sin límite» y gana a cualquier
+ * número, y un `null` que ya daba el plan no lo baja ninguna concesión. Subir
+ * un límite puntual es una operación corriente y conviene que sea fácil;
+ * bajarlo por debajo de lo que el plan promete no debería pasar sin querer.
  *
- * Misma razón que arriba: subir un límite puntual a un espacio es una operación
- * corriente y conviene que sea fácil; bajárselo por debajo de lo que su plan
- * promete no debería poder hacerse sin querer desde un formulario.
+ * En modo `sustituye`, lo concedido manda campo a campo, también hacia abajo.
+ * Los campos que la concesión no menciona siguen viniendo del plan: se
+ * sustituye lo que se escribió, no todo lo demás.
  */
 export function grantLimits(
   base: PlanLimits,
   granted: Partial<PlanLimits> | null | undefined,
+  mode: GrantMode = 'suma',
 ): PlanLimits {
   if (!granted) return base;
+
+  // Campo a campo, rellenando con el plan lo que la concesión no mencione.
+  if (mode === 'sustituye') return mergeOver(base, granted);
 
   const mayor = (
     actual: number | null,

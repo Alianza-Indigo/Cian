@@ -23,6 +23,7 @@ import {
   effectivePlan,
   grantLimits,
   resolveLimits,
+  type GrantMode,
 } from '../../billing/limits';
 import {
   grantsAccess,
@@ -60,16 +61,25 @@ async function getPaidPlan(ctx: TenantContext): Promise<Plan> {
 async function getPlatformGrant(ctx: TenantContext): Promise<{
   plan: Plan | null;
   limits: Partial<PlanLimits> | null;
+  mode: GrantMode;
 }> {
   assertTenantContext(ctx, 'getPlatformGrant');
 
   const [row] = await db
-    .select({ plan: tenants.platformPlan, limits: tenants.platformLimits })
+    .select({
+      plan: tenants.platformPlan,
+      limits: tenants.platformLimits,
+      override: tenants.platformOverride,
+    })
     .from(tenants)
     .where(eq(tenants.id, ctx.tenantId))
     .limit(1);
 
-  return { plan: row?.plan ?? null, limits: row?.limits ?? null };
+  return {
+    plan: row?.plan ?? null,
+    limits: row?.limits ?? null,
+    mode: row?.override ? 'sustituye' : 'suma',
+  };
 }
 
 /**
@@ -79,9 +89,10 @@ async function getPlatformGrant(ctx: TenantContext): Promise<{
  * Nadie se queda sin aplicación por no pagar: se queda con el plan gratuito,
  * que es un plan completo.
  *
- * Encima de eso puede haber una **concesión de plataforma**, que solo suma
- * (ver `effectivePlan`). Así, un espacio al que se le abrió el plan sin cobrarle
- * lo conserva aunque nunca aparezca en Stripe.
+ * Encima de eso puede haber una **concesión de plataforma**. Por omisión solo
+ * suma —un espacio al que se le abrió el plan sin cobrarle lo conserva aunque
+ * nunca aparezca en Stripe— y, si se pidió expresamente, sustituye. Ver
+ * `effectivePlan`.
  */
 export async function getEffectivePlan(ctx: TenantContext): Promise<Plan> {
   const [pagado, grant] = await Promise.all([
@@ -89,7 +100,7 @@ export async function getEffectivePlan(ctx: TenantContext): Promise<Plan> {
     getPlatformGrant(ctx),
   ]);
 
-  return effectivePlan(pagado, grant.plan);
+  return effectivePlan(pagado, grant.plan, grant.mode);
 }
 
 /**
@@ -107,10 +118,10 @@ export async function getTenantPlanLimits(
     getPlatformGrant(ctx),
   ]);
 
-  const plan = effectivePlan(pagado, grant.plan);
+  const plan = effectivePlan(pagado, grant.plan, grant.mode);
   const base = await getPlanLimits(plan);
 
-  return { plan, limits: grantLimits(base, grant.limits) };
+  return { plan, limits: grantLimits(base, grant.limits, grant.mode) };
 }
 
 /**

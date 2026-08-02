@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { auth } from '../auth';
 import { requireTenantContext, TENANT_COOKIE } from './context';
@@ -25,27 +25,13 @@ import { sendEmail, tenantInvitationEmail } from '../notifications/email';
 // Las constantes viven aparte porque este archivo es `'use server'`: exportar
 // de aquí algo que no sea una función asíncrona rompe el módulo en ejecución.
 import { INVITABLE_ROLES } from './roles';
+import { requestBaseUrl } from '../http/base-url';
 
 export type TenantActionResult =
   | { ok: true; message?: string; inviteUrl?: string }
   | { ok: false; error: string };
 
 const idSchema = z.uuid();
-
-/**
- * URL pública de esta petición.
- *
- * Se prefiere la cabecera `host` a una variable de entorno por la misma razón
- * que en el equipo de apoyo: en una vista previa de Vercel el dominio no es el
- * de producción, y un enlace de invitación que apunta al sitio equivocado no se
- * puede aceptar.
- */
-async function baseUrl(): Promise<string> {
-  const headerList = await headers();
-  const host = headerList.get('host');
-  const protocol = host?.startsWith('localhost') ? 'http' : 'https';
-  return host ? `${protocol}://${host}` : (process.env.AUTH_URL ?? '');
-}
 
 const inviteSchema = z.object({
   email: z.email().max(320),
@@ -71,7 +57,7 @@ export async function inviteToTenantAction(
     const [ctx, session] = await Promise.all([requireTenantContext(), auth()]);
 
     const { invitation, token } = await inviteToTenant(ctx, parsed.data);
-    const inviteUrl = `${await baseUrl()}/unirme/${token}`;
+    const inviteUrl = `${await requestBaseUrl()}/unirme/${token}`;
 
     await recordAudit(ctx, {
       action: 'tenant.invite',

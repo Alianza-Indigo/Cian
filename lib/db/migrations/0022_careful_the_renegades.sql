@@ -1,0 +1,1 @@
+ALTER TABLE "tenants" ADD COLUMN "platform_override" boolean DEFAULT false NOT NULL;
