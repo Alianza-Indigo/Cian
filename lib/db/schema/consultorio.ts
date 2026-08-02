@@ -391,6 +391,15 @@ export const whiteboardStates = pgTable(
       .notNull()
       .references(() => consultSessions.id, { onDelete: 'cascade' }),
     state: jsonb('state').$type<WhiteboardState>().notNull().default({ strokes: [] }),
+    /**
+     * Sube en cada operación.
+     *
+     * Es lo que deja preguntar «¿cambió algo?» sin traerse la pizarra entera en
+     * cada sondeo. Un entero y no `updated_at` porque dos trazos en el mismo
+     * milisegundo darían la misma marca de tiempo y uno de los dos se perdería
+     * para quien está mirando.
+     */
+    revision: integer('revision').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),

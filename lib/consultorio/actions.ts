@@ -17,7 +17,7 @@ import {
   shareInSession,
   requestAppointment,
   saveSessionSummary,
-  saveWhiteboard,
+  applyWhiteboard,
   setAppointmentStatus,
   setRecordingConsent,
   setSessionTaskStatus,
@@ -28,6 +28,7 @@ import {
 import { recordAudit } from '../db/repositories/audit';
 import { generateSessionSummaryDraft } from './summary-draft';
 import { SHAREABLE_TYPES } from '../team/types';
+import { parseStroke } from './whiteboard';
 import {
   APPOINTMENT_STATUSES,
   NOTE_VISIBILITIES,
@@ -484,32 +485,56 @@ export async function setSessionTaskStatusAction(
 
 // --- Pizarra -----------------------------------------------------------------
 
-const whiteboardSchema = z.object({
+/**
+ * Solo la forma exterior: qué sesión y qué operación.
+ *
+ * La forma del trazo la comprueba `parseStroke`, en el módulo de la pizarra,
+ * junto al resto de sus reglas —qué colores se admiten, qué grosores—. Tenerla
+ * en dos sitios sería tener dos versiones de la verdad.
+ */
+const whiteboardOpSchema = z.object({
   sessionId: z.uuid(),
-  strokes: z
-    .array(
-      z.object({
-        id: z.string().max(60),
-        color: z.string().max(20),
-        width: z.number().min(1).max(40),
-        points: z.array(z.number()).max(4000),
-      }),
-    )
-    .max(2000),
+  op: z.enum(['add', 'clear']),
+  stroke: z.unknown().optional(),
 });
 
-export async function saveWhiteboardAction(
+/**
+ * Aplica una operación de pizarra: añadir un trazo o borrar todo.
+ *
+ * Recibe la operación y no la pizarra entera. Mandar el estado completo hacía
+ * que con dos personas dibujando el último en soltar el lápiz borrara lo del
+ * otro; ahora los dos trazos sobreviven.
+ *
+ * Devuelve la revisión para que quien dibujó no vuelva a pedir lo que acaba de
+ * escribir.
+ */
+export async function applyWhiteboardAction(
   input: unknown,
-): Promise<ConsultorioActionResult> {
-  const parsed = whiteboardSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: 'Pizarra no válida.' };
+): Promise<ConsultorioActionResult & { revision?: number }> {
+  const parsed = whiteboardOpSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Operación no válida.' };
 
   try {
     const ctx = await requireTenantContext();
-    await saveWhiteboard(ctx, parsed.data.sessionId, {
-      strokes: parsed.data.strokes,
+
+    if (parsed.data.op === 'clear') {
+      const result = await applyWhiteboard(ctx, parsed.data.sessionId, {
+        kind: 'clear',
+      });
+      return { ok: true, revision: result.revision };
+    }
+
+    // El trazo se valida aquí y no en el esquema de Zod: la forma de un trazo
+    // vive en el módulo de la pizarra, con el resto de sus reglas.
+    const stroke = parseStroke(parsed.data.stroke);
+    if (!stroke) return { ok: false, error: 'Ese trazo no es válido.' };
+
+    const result = await applyWhiteboard(ctx, parsed.data.sessionId, {
+      kind: 'add',
+      stroke,
     });
-    return { ok: true };
+
+    return { ok: true, revision: result.revision };
   } catch (error) {
     return fail(error, 'No pudimos guardar la pizarra.');
   }

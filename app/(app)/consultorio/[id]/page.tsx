@@ -5,7 +5,7 @@ import {
   ensureSession,
   getAppointmentForParticipant,
   getSessionSummary,
-  getWhiteboard,
+  readWhiteboard,
   listSessionNotes,
   listSessionShares,
   listSessionTasks,
@@ -43,7 +43,7 @@ export default async function SesionPage({
       listSessionNotes(ctx, session.id),
       listSessionTasks(ctx, session.id),
       getSessionSummary(ctx, session.id),
-      getWhiteboard(ctx, session.id),
+      readWhiteboard(ctx, session.id),
       // Solo para saber si hay enlace. El enlace en sí no viaja en el HTML: se
       // pide a la ruta, que comprueba la ventana horaria en ese instante.
       meetingUrlForAppointment(ctx.tenantId, id),
@@ -93,7 +93,8 @@ export default async function SesionPage({
           ? { content: summary.content, published: summary.published }
           : null
       }
-      whiteboard={whiteboard}
+      whiteboard={whiteboard.state}
+      whiteboardRevision={whiteboard.revision}
       shares={shares.map((share) => ({
         id: share.id,
         resourceType: share.resourceType,

@@ -23,6 +23,10 @@ import {
 import { users } from '../schema/auth';
 import { ownsResource } from './ownership';
 import { safeAttachmentPath } from '../../attachments/path';
+import {
+  applyWhiteboardOp,
+  type WhiteboardOp,
+} from '../../consultorio/whiteboard';
 import type { ShareableType } from '../../team/types';
 import { MAX_LICENSE_DOCS } from '../../consultorio/types';
 import {
@@ -36,7 +40,6 @@ import {
   withdrawSignature,
 } from '../../consultorio/consent';
 import {
-  MAX_WHITEBOARD_STROKES,
   canOpenPractice,
   requiresLicense,
   type NoteVisibility,
@@ -1024,12 +1027,59 @@ export async function setSessionTaskStatus(
 
 // --- Pizarra -----------------------------------------------------------------
 
-export async function getWhiteboard(
+/**
+ * Aplica una operación de pizarra y devuelve el estado resultante.
+ *
+ * Antes esto recibía la pizarra entera y la reemplazaba, y con dos personas
+ * dibujando el último en soltar el lápiz borraba lo del otro. Ahora recibe qué
+ * hacer —añadir un trazo, o borrar todo— y lo aplica sobre lo que hay en la
+ * base en ese momento.
+ *
+ * La lectura y la escritura van en una transacción: entre leer el estado y
+ * escribirlo, la otra parte puede haber dibujado.
+ */
+export async function applyWhiteboard(
   ctx: TenantContext,
   sessionId: string,
-): Promise<WhiteboardState> {
+  op: WhiteboardOp,
+): Promise<{ state: WhiteboardState; revision: number }> {
   const found = await getSessionForParticipant(ctx, sessionId);
-  if (!found) return { strokes: [] };
+  if (!found) throw new Error('No encontramos esa sesión.');
+
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(whiteboardStates)
+      .where(
+        and(
+          eq(whiteboardStates.sessionId, sessionId),
+          eq(whiteboardStates.tenantId, ctx.tenantId),
+        ),
+      )
+      .limit(1);
+
+    const state = applyWhiteboardOp(current?.state ?? { strokes: [] }, op);
+    const revision = (current?.revision ?? 0) + 1;
+
+    await tx
+      .insert(whiteboardStates)
+      .values({ tenantId: ctx.tenantId, sessionId, state, revision })
+      .onConflictDoUpdate({
+        target: whiteboardStates.sessionId,
+        set: { state, revision, updatedAt: new Date() },
+      });
+
+    return { state, revision };
+  });
+}
+
+/** La pizarra con su revisión, para que quien sondea sepa si cambió. */
+export async function readWhiteboard(
+  ctx: TenantContext,
+  sessionId: string,
+): Promise<{ state: WhiteboardState; revision: number }> {
+  const found = await getSessionForParticipant(ctx, sessionId);
+  if (!found) return { state: { strokes: [] }, revision: 0 };
 
   const [row] = await db
     .select()
@@ -1042,43 +1092,9 @@ export async function getWhiteboard(
     )
     .limit(1);
 
-  return row?.state ?? { strokes: [] };
+  return { state: row?.state ?? { strokes: [] }, revision: row?.revision ?? 0 };
 }
 
-export async function saveWhiteboard(
-  ctx: TenantContext,
-  sessionId: string,
-  state: WhiteboardState,
-): Promise<void> {
-  const found = await getSessionForParticipant(ctx, sessionId);
-  if (!found) return;
-
-  const trimmed: WhiteboardState = {
-    strokes: state.strokes.slice(-MAX_WHITEBOARD_STROKES),
-  };
-
-  await db
-    .insert(whiteboardStates)
-    .values({ tenantId: ctx.tenantId, sessionId, state: trimmed })
-    .onConflictDoUpdate({
-      target: whiteboardStates.sessionId,
-      set: { state: trimmed, updatedAt: new Date() },
-    });
-}
-
-// --- Enlace de la videollamada ----------------------------------------------
-
-/**
- * El enlace de Meet de una cita.
- *
- * Primero el de la cita, si lo tiene; si no, el que el profesional dejó en su
- * perfil. Devuelve `null` cuando no hay ninguno, que es un caso normal: un
- * profesional puede no haberlo configurado todavía y la interfaz lo dice.
- *
- * **No lleva `TenantContext` porque la comprobación de acceso ya la hizo quien
- * llama** —`getAppointmentForParticipant`, en la misma petición—, y lo que se
- * le pasa aquí son identificadores ya verificados. Aun así filtra por tenant.
- */
 export async function meetingUrlForAppointment(
   tenantId: string,
   appointmentId: string,

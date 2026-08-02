@@ -27,6 +27,10 @@ import {
 } from '@/lib/consultorio/types';
 import { RECORDING_NOTICE } from '@/lib/consultorio/meeting';
 import {
+  WHITEBOARD_COLORS,
+  type WhiteboardColor,
+} from '@/lib/consultorio/whiteboard';
+import {
   SHAREABLE_TYPE_LABELS,
   type ShareableType,
 } from '@/lib/team/types';
@@ -40,7 +44,7 @@ import {
   revokeSessionShareAction,
   saveSessionSummaryAction,
   shareInSessionAction,
-  saveWhiteboardAction,
+  applyWhiteboardAction,
   setRecordingConsentAction,
   setSessionTaskStatusAction,
 } from '@/lib/consultorio/actions';
@@ -90,6 +94,7 @@ type Props = {
   tasks: Task[];
   summary: { content: string; published: boolean } | null;
   whiteboard: WhiteboardState;
+  whiteboardRevision: number;
   shares: Share[];
   shareable: Shareable[];
   endedAt: string | null;
@@ -100,30 +105,52 @@ const inputClass =
   'focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /**
+ * Cada cuánto se pregunta si la pizarra cambió.
+ *
+ * Dos segundos y medio se siente inmediato dibujando y son 24 peticiones por
+ * minuto y sesión, que para una consulta de dos personas es barato. Bajarlo no
+ * mejora la sensación lo suficiente como para justificar el gasto.
+ */
+const POLL_MS = 2500;
+
+/**
  * Pizarra colaborativa.
  *
  * Se dibuja con `<canvas>` y punteros nativos —`pointerdown`, `pointermove`—
  * en vez de eventos de ratón, porque en una consulta la mitad de la gente está
  * en una tableta o en un teléfono, y los eventos de ratón no llegan ahí.
  *
- * El estado se guarda en el servidor al soltar el trazo. **No es tiempo real
- * todavía**: la otra parte lo ve al recargar. La sincronización viva necesita
- * el canal de datos de la videollamada, que depende de la dependencia que esta
- * fase no puede instalar sin permiso. Está anotado en NOTES.md.
+ * ## Cómo se sincroniza
+ *
+ * Al soltar el trazo se manda **la operación** —este trazo, o borrar todo—, no
+ * la pizarra entera. Mandar el estado completo hacía que con dos personas
+ * dibujando el último en soltar el lápiz borrara lo del otro.
+ *
+ * Para ver lo que dibuja la otra parte se pregunta cada pocos segundos por la
+ * revisión. No es un canal abierto: mantener uno por sesión en este despliegue
+ * cuesta una función viva por consulta, y para dos personas dibujando el sondeo
+ * cuesta menos y no se cae.
+ *
+ * **Mientras se está dibujando no se refresca.** Reemplazar el lienzo debajo de
+ * un trazo a medio hacer es la forma más rápida de que alguien deje de usar
+ * esto.
  */
 function Whiteboard({
   sessionId,
   initial,
+  initialRevision,
   disabled,
 }: {
   sessionId: string;
   initial: WhiteboardState;
+  initialRevision: number;
   disabled: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<WhiteboardState['strokes']>(initial.strokes);
   const drawingRef = useRef<number[] | null>(null);
-  const [color, setColor] = useState('#1B1F5A');
+  const revisionRef = useRef(initialRevision);
+  const [color, setColor] = useState<WhiteboardColor>('#1B1F5A');
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -154,6 +181,51 @@ function Whiteboard({
     redraw();
   }, [redraw]);
 
+  /*
+   * Sondeo de la pizarra mientras la sesión está abierta.
+   *
+   * Se salta el turno si esta persona está dibujando: cambiar el lienzo debajo
+   * de un trazo a medio hacer lo estropea, y el trazo propio ya está en
+   * pantalla de todas formas.
+   */
+  useEffect(() => {
+    if (disabled) return;
+
+    let vivo = true;
+
+    const intervalo = setInterval(async () => {
+      if (drawingRef.current !== null) return;
+
+      try {
+        const response = await fetch(`/api/consultorio/pizarra/${sessionId}`, {
+          cache: 'no-store',
+        });
+        if (!response.ok) return;
+
+        const data = (await response.json()) as {
+          strokes: WhiteboardState['strokes'];
+          revision: number;
+        };
+
+        if (!vivo) return;
+        if (data.revision === revisionRef.current) return;
+        if (drawingRef.current !== null) return;
+
+        revisionRef.current = data.revision;
+        strokesRef.current = data.strokes;
+        redraw();
+      } catch {
+        // Un sondeo perdido no es nada: el siguiente lo recupera. Avisar de
+        // cada fallo de red en medio de una consulta sería peor que el fallo.
+      }
+    }, POLL_MS);
+
+    return () => {
+      vivo = false;
+      clearInterval(intervalo);
+    };
+  }, [sessionId, disabled, redraw]);
+
   function pointFrom(event: React.PointerEvent<HTMLCanvasElement>): [number, number] {
     const rect = event.currentTarget.getBoundingClientRect();
     const canvas = event.currentTarget;
@@ -164,8 +236,14 @@ function Whiteboard({
     ];
   }
 
-  function persist() {
-    void saveWhiteboardAction({ sessionId, strokes: strokesRef.current });
+  function persist(op: { op: 'add'; stroke: unknown } | { op: 'clear' }) {
+    void applyWhiteboardAction({ sessionId, ...op }).then((result) => {
+      // La revisión propia se anota para no volver a traerse lo que uno acaba
+      // de dibujar en el siguiente sondeo.
+      if (result.ok && typeof result.revision === 'number') {
+        revisionRef.current = result.revision;
+      }
+    });
   }
 
   return (
@@ -203,16 +281,19 @@ function Whiteboard({
           drawingRef.current = null;
           if (!points || points.length < 4) return;
 
-          strokesRef.current = [
-            ...strokesRef.current,
-            { id: crypto.randomUUID(), color, width: 3, points },
-          ];
-          persist();
+          const stroke = {
+            id: crypto.randomUUID(),
+            color,
+            width: 3,
+            points,
+          };
+          strokesRef.current = [...strokesRef.current, stroke];
+          persist({ op: 'add', stroke });
         }}
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {['#1B1F5A', '#C9A227', '#1f7a5a', '#8a2b2b'].map((value) => (
+        {WHITEBOARD_COLORS.map((value) => (
           <Button
             key={value}
             type="button"
@@ -234,7 +315,7 @@ function Whiteboard({
           onClick={() => {
             strokesRef.current = [];
             redraw();
-            persist();
+            persist({ op: 'clear' });
           }}
         >
           <Eraser aria-hidden="true" />
@@ -402,6 +483,7 @@ export function SessionRoom(props: Props) {
           <Whiteboard
             sessionId={props.sessionId}
             initial={props.whiteboard}
+            initialRevision={props.whiteboardRevision}
             disabled={Boolean(props.endedAt)}
           />
         </div>
