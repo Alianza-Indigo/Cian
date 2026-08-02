@@ -23,6 +23,9 @@ export default async function AdminLayout({
   const tabs = [
     { href: '/admin', label: 'Métricas' },
     { href: '/admin/miembros', label: 'Miembros' },
+    // Dar de alta profesionales es tarea de quien administra, no del propio
+    // profesional: por eso está aquí y no dentro de «Mi perfil profesional».
+    { href: '/admin/profesionales', label: 'Profesionales' },
     { href: '/admin/modelos', label: 'Modelos' },
     { href: '/admin/auditoria', label: 'Auditoría' },
     // La biblioteca la ve cualquier admin: publica para su espacio. Solo el

@@ -81,13 +81,30 @@ const ICONS = {
   admin: ShieldCheck,
 } as const;
 
+/**
+ * Un bloque del menú.
+ *
+ * Antes era una lista plana de diecisiete enlaces sin ninguna separación, y
+ * encontrar algo exigía leerlos todos. Para quien navega esta plataforma eso no
+ * es una molestia estética: una lista larga sin estructura es precisamente lo
+ * que cuesta procesar.
+ *
+ * Los grupos van en orden de frecuencia de uso, no alfabético ni por módulo del
+ * PRD. Lo que se abre a diario arriba; lo que se toca una vez, abajo.
+ */
+export type NavGroup = {
+  /** Encabezado del bloque. Uno solo no se enseña: sería ruido. */
+  label: string;
+  items: readonly NavItem[];
+};
+
 export type SpaceOption = { id: string; name: string };
 
 type AppShellProps = {
   tenantName: string;
   userName: string;
   userEmail: string;
-  navItems: readonly NavItem[];
+  navGroups: readonly NavGroup[];
   /**
    * Espacios a los que pertenece esta persona.
    *
@@ -114,7 +131,7 @@ export function AppShell({
   tenantName,
   userName,
   userEmail,
-  navItems,
+  navGroups,
   spaces,
   currentTenantId,
   adminHref,
@@ -241,36 +258,50 @@ export function AppShell({
       <div className="min-h-0 flex-1 overflow-y-auto px-4">
         <ConversationHistory conversations={conversations} />
 
-        <nav
-          aria-label="Secciones de CIAN"
-          className="mt-2 border-t border-border py-2"
-        >
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = ICONS[item.icon];
-              const active = pathname.startsWith(item.href);
+        {/*
+          * Un `<nav>` por bloque, cada uno con su nombre accesible.
+          *
+          * Con lector de pantalla, un solo `<nav>` de diecisiete enlaces obliga
+          * a recorrerlos todos; así se puede saltar de bloque en bloque, que es
+          * la misma ventaja que dan los encabezados a quien mira.
+          */}
+        {navGroups.map((group) => (
+          <nav
+            key={group.label}
+            aria-label={group.label}
+            className="mt-2 border-t border-border py-2"
+          >
+            <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {group.label}
+            </h2>
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-                      active
-                        ? 'bg-primary-soft text-foreground'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    )}
-                    style={{ minHeight: 'var(--cian-control-height)' }}
-                  >
-                    <Icon aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+            <ul className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = ICONS[item.icon];
+                const active = pathname.startsWith(item.href);
+
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-primary-soft text-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                      style={{ minHeight: 'var(--cian-control-height)' }}
+                    >
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ))}
       </div>
 
       {/* --- Pie fijo ----------------------------------------------------- */}

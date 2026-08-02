@@ -1,10 +1,8 @@
 import type { Metadata } from 'next';
 import { requireTenantContext } from '@/lib/tenant/context';
-import { hasRoleAtLeast } from '@/lib/tenant/guard';
 import {
   getMyProfessionalProfile,
   listAvailability,
-  listProfessionals,
 } from '@/lib/db/repositories/consultorio';
 import { DEFAULT_TIME_ZONE } from '@/lib/notifications/types';
 import { ProfessionalBoard } from './professional-board';
@@ -16,13 +14,10 @@ export default async function ProfesionalPage() {
   const ctx = await requireTenantContext();
 
   const profile = await getMyProfessionalProfile(ctx);
-  const isAdmin = hasRoleAtLeast(ctx, 'admin');
 
-  const [availability, pending] = await Promise.all([
-    profile ? listAvailability(ctx, profile.id) : Promise.resolve([]),
-    // La revisión de altas es de quien administra el espacio.
-    isAdmin ? listProfessionals(ctx, false) : Promise.resolve([]),
-  ]);
+  const availability = profile
+    ? await listAvailability(ctx, profile.id)
+    : [];
 
   return (
     <div style={{ display: 'grid', gap: 'var(--cian-section-gap)' }}>
@@ -59,16 +54,6 @@ export default async function ProfesionalPage() {
           active: slot.active,
         }))}
         defaultTimezone={DEFAULT_TIME_ZONE}
-        isAdmin={isAdmin}
-        roster={pending.map((entry) => ({
-          id: entry.id,
-          name: entry.name ?? entry.email ?? 'Sin nombre',
-          specialties: entry.specialties,
-          licenseNumber: entry.licenseNumber,
-          verificationStatus: entry.verificationStatus,
-          termsAcceptedAt: entry.termsAcceptedAt?.toISOString() ?? null,
-          isMe: entry.userId === ctx.userId,
-        }))}
       />
     </div>
   );

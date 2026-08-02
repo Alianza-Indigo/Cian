@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { auth } from '../auth';
 import { requireTenantContext } from '../tenant/context';
+import { hasRoleAtLeast } from '../tenant/guard';
 import {
   getSubscription,
   saveModelConfig,
@@ -68,6 +69,20 @@ export async function startCheckoutAction(
 
   try {
     const [ctx, session] = await Promise.all([requireTenantContext(), auth()]);
+
+    /*
+     * La suscripción es del espacio, no de quien la mira.
+     *
+     * Mientras cada persona estuvo sola en el suyo esto sobraba. Desde que se
+     * puede invitar gente, sin esta comprobación cualquier integrante podía
+     * contratar un plan a nombre de la organización.
+     */
+    if (!hasRoleAtLeast(ctx, 'admin')) {
+      return {
+        ok: false,
+        error: 'La membresía la administra quien lleva el espacio.',
+      };
+    }
     const existing = await getSubscription(ctx);
     const origin = await baseUrl();
 
@@ -98,9 +113,25 @@ export async function startCheckoutAction(
 }
 
 /** Portal de Stripe: cambiar tarjeta, ver facturas, cancelar. */
+/**
+ * Abre el portal de Stripe.
+ *
+ * Solo `admin` u `owner`, y aquí importa más que en el checkout: dentro del
+ * portal se cancela la suscripción y se cambia la tarjeta. Sin esta
+ * comprobación, cualquier integrante de una organización podía dejar sin plan
+ * a todo el mundo.
+ */
 export async function openBillingPortalAction(): Promise<BillingActionResult> {
   try {
     const ctx = await requireTenantContext();
+
+    if (!hasRoleAtLeast(ctx, 'admin')) {
+      return {
+        ok: false,
+        error: 'La membresía la administra quien lleva el espacio.',
+      };
+    }
+
     const subscription = await getSubscription(ctx);
 
     if (!subscription?.stripeCustomerId) {

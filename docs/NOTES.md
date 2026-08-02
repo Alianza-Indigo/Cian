@@ -5,6 +5,73 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Transversal — El menú lo mezclaba todo
+
+Reportado en uso: «el menú lateral mezcla todo, el perfil para dar de alta a los
+médicos aparece en todas las cuentas». Al mirarlo salieron tres cosas, y la
+tercera no se había visto.
+
+### Diecisiete enlaces en una lista plana
+
+Sin separación y en un orden que no respondía a nada, así que encontrar algo
+obligaba a leerlos todos. En una plataforma para personas neurodivergentes eso
+no es un detalle de estilo: una lista larga sin estructura es exactamente lo
+que cuesta procesar.
+
+Pasa a cinco bloques con encabezado —«Tu día», «Cómo estás», «Material», «Con
+otras personas», «Tu cuenta»—, ordenados por frecuencia de uso y no por módulo
+del PRD ni alfabéticamente.
+
+Cada bloque es su propio `<nav>` con `aria-label`. Con lector de pantalla, un
+solo `<nav>` de diecisiete enlaces obliga a recorrerlos todos; así se salta de
+bloque en bloque, que es la misma ventaja que dan los encabezados a quien mira.
+
+### «Perfil profesional» aparecía en todas las cuentas
+
+Incluidas las de familias que nunca van a atender a nadie. Un menú con opciones
+que no van contigo no es solo ruido: hace dudar de si te falta hacer algo.
+
+Ahora solo lo ven quienes pueden ejercer. Un admin lo ve también, y no es un
+descuido: **el rol es uno solo**, así que quien lleva un espacio y además es
+profesional no puede tener los dos a la vez. Si algún día hace falta que sí,
+lo que toca es que la membresía tenga un conjunto de roles, no parchear esto.
+
+Lo que se esconde en el menú es **cortesía, no seguridad**: cada pantalla y cada
+acción comprueban el rol por su cuenta.
+
+### La pantalla mezclaba «mis datos» con «doy de alta a otros»
+
+`/profesional` contenía el formulario del perfil propio **y** la lista de
+profesionales por verificar. Por eso la pregunta llegó como «el perfil para dar
+de alta a los médicos»: quien administra entraba a una pantalla que se llama
+como si fuera suya para hacer algo que es sobre otros.
+
+Se parte en dos: `/profesional` es «Mi perfil profesional» y nada más, y la
+verificación se va a `/admin/profesionales`, dentro del panel, donde vive el
+resto de la administración del espacio. De paso la lista ahora enseña los
+documentos de cédula, que son justo lo que hay que mirar para verificar, y dice
+cuándo no hay ninguno.
+
+### Lo que no se había visto: cualquiera podía tocar la suscripción
+
+`startCheckoutAction` y `openBillingPortalAction` comprobaban el contexto de
+tenant y **no el rol**. Mientras cada persona estuvo sola en su espacio daba
+igual. Desde que se puede invitar gente, cualquier integrante de una
+organización podía abrir el portal de Stripe del espacio —donde se cambia la
+tarjeta y se **cancela la suscripción**— o contratar un plan a nombre de la
+organización.
+
+Es el mismo patrón que el de `shareResource`: código que era correcto para un
+espacio de una persona y dejó de serlo al añadir las membresías, sin que nada
+lo señalara. Conviene revisar con esa lente cualquier acción escrita antes de
+esa fecha.
+
+La pantalla de membresía se puede seguir viendo siendo integrante —saber en qué
+plan estás y cuánto llevas usado es la respuesta a «por qué no puedo subir más
+documentos»— pero los botones de contratar y de facturación no aparecen.
+
+---
+
 ## Transversal — Cerrar sesión daba error
 
 Reportado en uso. La causa no tenía nada que ver con cerrar sesión: la

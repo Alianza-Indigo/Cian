@@ -9,7 +9,6 @@ import { ToggleField } from '@/components/ui/toggle-field';
 import {
   SPECIALTIES,
   SPECIALTY_LABELS,
-  VERIFICATION_STATUSES,
   VERIFICATION_STATUS_LABELS,
   canOpenPractice,
   requiresLicense,
@@ -27,7 +26,6 @@ import {
   deleteAvailabilityAction,
   removeLicenseDocAction,
   saveProfessionalProfileAction,
-  setVerificationStatusAction,
 } from '@/lib/consultorio/actions';
 import { uploadAttachments } from '@/lib/attachments/client';
 
@@ -51,15 +49,6 @@ type Slot = {
   active: boolean;
 };
 
-type RosterEntry = {
-  id: string;
-  name: string;
-  specialties: Specialty[];
-  licenseNumber: string | null;
-  verificationStatus: VerificationStatus;
-  termsAcceptedAt: string | null;
-  isMe: boolean;
-};
 
 const inputClass =
   'w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground ' +
@@ -69,14 +58,10 @@ export function ProfessionalBoard({
   profile,
   availability,
   defaultTimezone,
-  isAdmin,
-  roster,
 }: {
   profile: Profile | null;
   availability: Slot[];
   defaultTimezone: string;
-  isAdmin: boolean;
-  roster: RosterEntry[];
 }) {
   const router = useRouter();
   const [status, setStatus] = useState('');
@@ -503,75 +488,6 @@ export function ProfessionalBoard({
         </section>
       ) : null}
 
-      {/* --- Revisión de altas ------------------------------------------------ */}
-      {isAdmin && roster.length > 0 ? (
-        <section aria-labelledby="revision">
-          <h2 id="revision" className="text-lg font-semibold tracking-tight">
-            Verificación
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Verificar es comprobar una cédula contra el registro público. El
-            código solo garantiza que quede constancia de quién lo declaró.
-          </p>
-
-          <ul className="mt-3" style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
-            {roster.map((entry) => (
-              <li key={entry.id}>
-                <Card>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold">
-                        {entry.name}
-                        {entry.isMe ? (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            (tú)
-                          </span>
-                        ) : null}
-                      </h3>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {entry.specialties
-                          .map((specialty) => SPECIALTY_LABELS[specialty])
-                          .join(', ')}
-                        {entry.licenseNumber ? ` · Cédula ${entry.licenseNumber}` : ''}
-                      </p>
-                      {!entry.termsAcceptedAt ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          No ha aceptado los términos: no se puede verificar.
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <select
-                      aria-label={`Estado de verificación de ${entry.name}`}
-                      value={entry.verificationStatus}
-                      disabled={isPending || !entry.termsAcceptedAt}
-                      onChange={(event) =>
-                        run(() =>
-                          setVerificationStatusAction({
-                            professionalId: entry.id,
-                            status: event.target.value as VerificationStatus,
-                          }),
-                        )
-                      }
-                      className={inputClass}
-                      style={{
-                        minHeight: 'var(--cian-control-height)',
-                        width: 'auto',
-                      }}
-                    >
-                      {VERIFICATION_STATUSES.map((value) => (
-                        <option key={value} value={value}>
-                          {VERIFICATION_STATUS_LABELS[value]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireTenantContext } from '@/lib/tenant/context';
+import { hasRoleAtLeast } from '@/lib/tenant/guard';
 import { getSubscription } from '@/lib/db/repositories/billing';
 import { planOverview } from '@/lib/billing/enforce';
 import { stripeConfigured } from '@/lib/billing/stripe';
@@ -14,6 +15,16 @@ export default async function MembresiaPage({
   searchParams: Promise<{ estado?: string }>;
 }) {
   const [ctx, params] = await Promise.all([requireTenantContext(), searchParams]);
+
+  /*
+   * La pantalla se puede ver siendo integrante; contratar y cancelar, no.
+   *
+   * Ver el plan y el consumo le sirve a cualquiera —es la respuesta a «por qué
+   * no puedo subir más documentos»— y no revela nada de nadie. Lo que cambia
+   * es que los botones no aparecen, y las acciones de cobro además lo
+   * comprueban por su cuenta.
+   */
+  const canManage = hasRoleAtLeast(ctx, 'admin');
 
   const [{ plan, limits, usage }, subscription] = await Promise.all([
     planOverview(ctx),
@@ -31,7 +42,15 @@ export default async function MembresiaPage({
         </p>
       </div>
 
+      {!canManage ? (
+        <p className="text-sm text-muted-foreground">
+          La membresía de este espacio la administra quien lo lleva. Aquí puedes
+          ver en qué plan estás y cuánto llevas usado.
+        </p>
+      ) : null}
+
       <MembershipBoard
+        canManage={canManage}
         plan={plan}
         limits={limits}
         usage={{

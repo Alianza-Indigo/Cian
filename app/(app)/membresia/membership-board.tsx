@@ -52,6 +52,7 @@ function formatDate(iso: string): string {
 }
 
 export function MembershipBoard({
+  canManage,
   plan,
   limits,
   usage,
@@ -59,6 +60,8 @@ export function MembershipBoard({
   paymentsReady,
   checkoutState,
 }: {
+  /** Solo quien administra el espacio contrata, cambia o cancela. */
+  canManage: boolean;
   plan: Plan;
   limits: PlanLimits;
   usage: Record<LimitedResource, number>;
@@ -131,7 +134,7 @@ export function MembershipBoard({
           </p>
         ) : null}
 
-        {subscription?.hasCustomer ? (
+        {canManage && subscription?.hasCustomer ? (
           <Button
             type="button"
             variant="outline"
@@ -196,7 +199,7 @@ export function MembershipBoard({
       </section>
 
       {/* --- Mejorar de plan ------------------------------------------------ */}
-      {upgrade ? (
+      {canManage && upgrade ? (
         <section aria-labelledby="mejorar">
           <h2 id="mejorar" className="text-lg font-semibold tracking-tight">
             Plan {PLAN_LABELS[upgrade]}
