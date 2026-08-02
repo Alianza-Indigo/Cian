@@ -94,6 +94,13 @@ export const professionals = pgTable(
     }),
     /** Qué versión de los términos aceptó, para cuando cambien. */
     termsVersion: text('terms_version'),
+    /**
+     * Enlace de Google Meet por omisión.
+     *
+     * La videollamada la pone Meet; CIAN controla quién ve este enlace y
+     * cuándo, no lo que ocurre dentro de la reunión.
+     */
+    defaultMeetingUrl: text('default_meeting_url'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -148,8 +155,14 @@ export const appointments = pgTable(
       mode: 'date',
     }).notNull(),
     durationMinutes: integer('duration_minutes').notNull().default(50),
-    /** Nombre de la sala. Lo deriva el servidor; el cliente nunca lo elige. */
+    /**
+     * Identificador interno de la sesión. Se conserva aunque el video sea
+     * externo: es la referencia estable de la cita en registros y auditoría.
+     */
     roomId: text('room_id').notNull(),
+    /** Enlace de Meet de esta cita. Si es null se usa el del profesional. */
+    meetingUrl: text('meeting_url'),
+    meetingProvider: text('meeting_provider').notNull().default('meet'),
     reason: text('reason'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()

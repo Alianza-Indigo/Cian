@@ -7,33 +7,60 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ## Fase 10 — Consultorios virtuales
 
-### La dependencia que esta fase no puede evitar
+### La videollamada la pone Google Meet
 
-`livekit-client`. Es la única de todo el proyecto que no se ha podido sortear
-con lo que Node y el navegador ya traen.
+Decisión del responsable, tomada al cerrar la fase: nada de servidor de medios
+propio ni de SDK de WebRTC. Cada profesional pega su enlace de Meet en su perfil
+y CIAN controla **quién lo ve y cuándo**.
 
-- **El token sí** está escrito a mano: es un JWT HS256 y `node:crypto` lo firma.
-  `lib/consultorio/livekit.ts`, con pruebas que comprueban que un token con las
-  reclamaciones alteradas se rechaza, que uno caducado se rechaza, y que el
-  permiso de grabar solo viaja cuando se concede.
-- **El cliente WebRTC no.** Señalización, ICE, publicación de pistas y
-  recuperación de red son un protocolo entero; escribirlo a mano no es una
-  opción razonable.
+Con eso, el proyecto entero queda **sin una sola dependencia fuera de la lista
+autorizada del PRD**, que era la única que quedaba pendiente.
 
-Se consideró WebRTC punto a punto con `RTCPeerConnection` y señalización por
-sondeo, que para una consulta 1 a 1 es viable. Se descartó: sin TURN falla en
-las redes con NAT simétrico —entre un 10 % y un 20 % de las conexiones— y el
-criterio del PRD pide conectar en menos de cinco segundos entre dos redes
-distintas. Un stack propio que falla a veces, en un consultorio de salud, es
-peor que pedir la dependencia.
+**Lo que CIAN sigue controlando:** el enlace no viaja en el HTML de la página.
+Se pide a `/api/consultorio/sala/[appointmentId]`, que comprueba en ese
+instante participación, tenant, estado de la cita y ventana horaria. Un enlace
+no sobrevive a que la cita se cancele, y quien no es parte de la consulta no lo
+obtiene por ninguna vía.
 
-**Todo lo demás de la sesión funciona sin ella**: agenda, sala de espera,
-notas, tareas, resumen, pizarra y consentimiento. La interfaz dice qué falta en
-vez de fingir.
+**Lo que CIAN ya no controla:** lo que pase dentro de Meet.
 
-Al instalarla, lo que hay que escribir es el componente que consume
-`/api/consultorio/sala/[appointmentId]` —que ya devuelve token, URL y sala— y
-conecta. La ruta, los permisos y el consentimiento ya están.
+### El criterio de la grabación cambia de alcance, y hay que decirlo
+
+El PRD pide que la grabación sea «imposible de iniciar sin consentimiento
+registrado de ambas partes». Con la videollamada en Meet, **ese criterio ya no
+se puede cumplir técnicamente**: quien decide grabar dentro de Meet es Google y
+quien maneja la reunión, no nosotros.
+
+Lo que queda, y está implementado y probado:
+
+- El acuerdo exige las **dos** firmas y se guarda con sello de tiempo del
+  servidor, de modo que después se puede responder quién autorizó y cuándo.
+- Basta con que una parte lo retire para que el acuerdo deje de existir.
+- La pantalla lo dice con estas palabras: «tu autorización queda registrada
+  aquí y sirve como acuerdo entre ambas partes, pero CIAN no puede impedir
+  técnicamente lo que ocurra dentro de Meet».
+
+Se prefirió decirlo a dejar una promesa que la arquitectura ya no sostiene. En
+una consulta de salud, «imposible» cuando en realidad es «acordado» es una
+mentira con consecuencias.
+
+`canStartRecording` sigue siendo la función que decidiría el permiso técnico si
+algún día la videollamada vuelve a un servidor propio. La pieza está lista; lo
+que falta es el servidor.
+
+### El enlace se valida contra una lista de hosts
+
+Un campo de URL libre que después se pinta como enlace, dentro de una
+plataforma de salud, es una vía de phishing: bastaría con que alguien con
+perfil profesional pusiera una dirección que imita a Meet.
+
+`parseMeetingLink` exige `https`, host **exacto** de la lista —se compara el
+host completo, no un sufijo, porque `meet.google.com.phishing.mx` pasaría un
+`endsWith`— y rechaza credenciales embebidas. Hay pruebas con cuatro impostores
+y cuatro protocolos peligrosos.
+
+Añadir Zoom es agregar su host a `ALLOWED_HOSTS` y su etiqueta; el resto del
+módulo no cambia.
 
 ### `sessions` estaba ocupado
 
@@ -55,18 +82,6 @@ la condición de visibilidad está en el `WHERE`, que la consulta del usuario
 nunca menciona `privada`, y —para que la prueba no se satisfaga filtrando
 siempre— que la del profesional **no** filtra.
 
-### Tres capas para que la grabación sea imposible sin consentimiento
-
-El criterio dice «imposible», no «desaconsejado»:
-
-1. `canStartRecording` exige una firma de cada rol.
-2. El permiso `roomRecord` del token solo se concede si esa función dice que sí.
-   Sin él, el servidor de medios rechaza la grabación aunque el cliente la pida.
-3. Las firmas se guardan con sello de tiempo **del servidor**, así que después
-   se puede responder quién autorizó y cuándo.
-
-Basta con que una parte retire su firma para que deje de ser posible.
-
 ### Editar el perfil devuelve la verificación a pendiente
 
 Si cambian las especialidades o la cédula. Verificar a alguien como psicólogo y
@@ -75,12 +90,18 @@ la verificación existe para tapar.
 
 ### Pendientes de esta fase
 
-- **Sin video.** Cuatro criterios dependen de él: conectar en menos de cinco
-  segundos, pantalla compartida junto al video, y funcionar en Safari iOS. El
-  chat de sesión también, porque iba por el canal de datos de LiveKit.
-- **La pizarra no se sincroniza sola.** Se guarda en el servidor al soltar el
-  trazo y la otra parte la ve al recargar. El tiempo real necesita el canal de
-  datos de la videollamada.
+- **Tres criterios pasan a depender de Meet, no de CIAN**: conectar en menos de
+  cinco segundos, pantalla compartida junto al video y funcionar en Safari iOS.
+  Los tres los cumple Meet por su cuenta; CIAN ya no participa en ellos y por
+  tanto no puede garantizarlos ni medirlos.
+- **La grabación con consentimiento ya no es una garantía técnica**, solo un
+  acuerdo registrado. Ver arriba.
+- **Sin chat de sesión.** Iba por el canal de datos de la videollamada. El de
+  Meet sirve, y duplicarlo dentro de CIAN sería ruido; queda como decisión
+  abierta si se quiere uno que se conserve en el historial.
+- **La pizarra no se sincroniza sola.** Se guarda al soltar el trazo y la otra
+  parte la ve al recargar. Para tiempo real haría falta un canal en vivo, que
+  ahora mismo no existe en ninguna parte del sistema.
 - **El resumen no lo genera la IA todavía.** El campo, la aprobación y la
   publicación están; falta la llamada al modelo que redacte el borrador a
   partir de las notas compartidas. Es media hora de trabajo y depende de una

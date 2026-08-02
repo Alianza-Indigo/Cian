@@ -10,6 +10,12 @@
  * > La grabación es **imposible de iniciar** sin consentimiento registrado de
  * > ambas partes.
  *
+ * De este segundo, lo que se prueba es lo que CIAN puede sostener: que el
+ * acuerdo exige las dos firmas y que basta una retirada para deshacerlo. La
+ * videollamada ocurre en Google Meet y **CIAN no puede impedir técnicamente
+ * que alguien grabe ahí dentro**; el alcance real está dicho en NOTES.md, en
+ * `lib/consultorio/consent.ts` y en la propia pantalla de sesión.
+ *
  * > Las notas privadas del profesional **jamás** aparecen en ninguna respuesta
  * > de API accesible al usuario — verificado con prueba explícita.
  *
@@ -19,7 +25,6 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createHmac } from 'node:crypto';
 
 import {
   APPOINTMENT_STATUSES,
@@ -44,10 +49,9 @@ import {
   type AvailabilityRule,
 } from '../lib/consultorio/availability';
 import {
-  createAccessToken,
-  roomNameFor,
-  verifyAccessToken,
-} from '../lib/consultorio/livekit';
+  describeMeetingLink,
+  parseMeetingLink,
+} from '../lib/consultorio/meeting';
 
 const MEXICO = 'America/Mexico_City';
 
@@ -128,7 +132,7 @@ const USUARIO = {
   at: '2026-08-03T15:00:30.000Z',
 };
 
-describe('grabación: imposible sin las dos firmas', () => {
+describe('grabación: el acuerdo exige las dos firmas', () => {
   it('sin nadie, no', () => {
     const verdict = canStartRecording(emptyConsent());
 
@@ -204,186 +208,95 @@ describe('grabación: imposible sin las dos firmas', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Token de LiveKit
+// Enlace de la videollamada
 // ---------------------------------------------------------------------------
 
-const LIVEKIT_ENV = {
-  LIVEKIT_API_KEY: 'APIprueba',
-  LIVEKIT_API_SECRET: 'secreto-de-prueba-suficientemente-largo',
-  NEXT_PUBLIC_LIVEKIT_URL: 'wss://cian.livekit.cloud',
-};
+describe('enlace de Google Meet', () => {
+  it('acepta un enlace de Meet', () => {
+    const verdict = parseMeetingLink('https://meet.google.com/abc-defg-hij');
 
-function withLivekitEnv<T>(run: () => T): T {
-  Object.assign(process.env, LIVEKIT_ENV);
-  try {
-    return run();
-  } finally {
-    for (const key of Object.keys(LIVEKIT_ENV)) delete process.env[key];
-  }
-}
+    assert.equal(verdict.valid, true);
+    if (!verdict.valid) return;
+    assert.equal(verdict.link.provider, 'meet');
+    assert.equal(verdict.link.url, 'https://meet.google.com/abc-defg-hij');
+  });
 
-const NOW = 1_800_000_000;
-
-describe('token de sala', () => {
-  it('sin configuración devuelve null en vez de un token roto', () => {
-    const token = createAccessToken(
-      {
-        room: 'x',
-        identity: 'u',
-        name: 'Quien sea',
-        role: 'usuario',
-        canRecord: false,
-      },
-      NOW,
+  it('tolera espacios alrededor', () => {
+    assert.equal(
+      parseMeetingLink('  https://meet.google.com/abc-defg-hij  ').valid,
+      true,
     );
-
-    assert.equal(token, null);
-  });
-
-  it('el token firmado se verifica con el mismo secreto', () => {
-    withLivekitEnv(() => {
-      const signed = createAccessToken(
-        {
-          room: 'cian-t-a',
-          identity: 'user-1',
-          name: 'Ana',
-          role: 'usuario',
-          canRecord: false,
-        },
-        NOW,
-      );
-
-      assert.ok(signed);
-
-      const verdict = verifyAccessToken(
-        signed.token,
-        LIVEKIT_ENV.LIVEKIT_API_SECRET,
-        NOW + 60,
-      );
-
-      assert.equal(verdict.valid, true);
-      if (!verdict.valid) return;
-
-      assert.equal(verdict.claims.sub, 'user-1');
-      assert.equal(verdict.claims.video.room, 'cian-t-a');
-      assert.equal(verdict.claims.video.roomJoin, true);
-    });
-  });
-
-  it('un token firmado con otro secreto se rechaza', () => {
-    withLivekitEnv(() => {
-      const signed = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'usuario', canRecord: false },
-        NOW,
-      );
-      assert.ok(signed);
-
-      const verdict = verifyAccessToken(signed.token, 'otro-secreto', NOW);
-      assert.equal(verdict.valid, false);
-    });
   });
 
   /*
-   * El intento evidente: cambiar las reclamaciones para darse permiso de
-   * grabación conservando la firma.
+   * Lo que esta validación existe para impedir: un campo de URL libre que
+   * después se pinta como enlace, dentro de una plataforma de salud, es una vía
+   * de phishing. Bastaría con un host que se parezca a Meet.
    */
-  it('un token con las reclamaciones alteradas se rechaza', () => {
-    withLivekitEnv(() => {
-      const signed = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'usuario', canRecord: false },
-        NOW,
+  it('rechaza un host que solo se parece a Meet', () => {
+    for (const impostor of [
+      'https://meet.google.com.phishing.mx/abc',
+      'https://meet-google.com/abc',
+      'https://notmeet.google.com/abc',
+      'https://evil.com/meet.google.com/abc',
+    ]) {
+      assert.equal(
+        parseMeetingLink(impostor).valid,
+        false,
+        `debió rechazar ${impostor}`,
       );
-      assert.ok(signed);
-
-      const [header, payload, signature] = signed.token.split('.');
-      const claims = JSON.parse(
-        Buffer.from(payload!, 'base64url').toString('utf8'),
-      );
-      claims.video.roomRecord = true;
-
-      const alterado = [
-        header,
-        Buffer.from(JSON.stringify(claims)).toString('base64url'),
-        signature,
-      ].join('.');
-
-      const verdict = verifyAccessToken(
-        alterado,
-        LIVEKIT_ENV.LIVEKIT_API_SECRET,
-        NOW,
-      );
-
-      assert.equal(verdict.valid, false);
-    });
+    }
   });
 
-  it('un token caducado se rechaza', () => {
-    withLivekitEnv(() => {
-      const signed = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'usuario', canRecord: false },
-        NOW,
-      );
-      assert.ok(signed);
-
-      const verdict = verifyAccessToken(
-        signed.token,
-        LIVEKIT_ENV.LIVEKIT_API_SECRET,
-        NOW + 60 * 60 * 24,
-      );
-
-      assert.equal(verdict.valid, false);
-    });
+  it('rechaza cualquier cosa que no sea https', () => {
+    for (const bad of [
+      'http://meet.google.com/abc',
+      'javascript:alert(1)',
+      'data:text/html,<script>',
+      'ftp://meet.google.com/abc',
+    ]) {
+      assert.equal(parseMeetingLink(bad).valid, false, `debió rechazar ${bad}`);
+    }
   });
 
-  /** La pieza que sostiene el criterio de la grabación en el servidor de medios. */
-  it('el permiso de grabar solo viaja cuando se concede', () => {
-    withLivekitEnv(() => {
-      const sin = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'profesional', canRecord: false },
-        NOW,
-      );
-      const con = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'profesional', canRecord: true },
-        NOW,
-      );
-
-      assert.ok(sin && con);
-
-      const claimsOf = (token: string) =>
-        JSON.parse(
-          Buffer.from(token.split('.')[1]!, 'base64url').toString('utf8'),
-        );
-
-      assert.equal(claimsOf(sin.token).video.roomRecord, false);
-      assert.equal(claimsOf(con.token).video.roomRecord, true);
-    });
+  it('rechaza credenciales embebidas en la URL', () => {
+    assert.equal(
+      parseMeetingLink('https://usuario:clave@meet.google.com/abc').valid,
+      false,
+    );
   });
 
-  it('firma con HS256 sobre cabecera y reclamaciones', () => {
-    withLivekitEnv(() => {
-      const signed = createAccessToken(
-        { room: 'r', identity: 'u', name: 'n', role: 'usuario', canRecord: false },
-        NOW,
-      );
-      assert.ok(signed);
-
-      const [header, payload, signature] = signed.token.split('.');
-      const expected = createHmac('sha256', LIVEKIT_ENV.LIVEKIT_API_SECRET)
-        .update(`${header}.${payload}`)
-        .digest('base64url');
-
-      assert.equal(signature, expected);
-    });
+  it('rechaza lo vacío y lo ilegible', () => {
+    assert.equal(parseMeetingLink('').valid, false);
+    assert.equal(parseMeetingLink('   ').valid, false);
+    assert.equal(parseMeetingLink('no soy una url').valid, false);
   });
 
-  it('el nombre de la sala lo deriva el servidor, no el cliente', () => {
-    const room = roomNameFor('tenant-abc', 'cita-123');
+  it('no distingue mayúsculas en el host', () => {
+    assert.equal(parseMeetingLink('https://MEET.GOOGLE.COM/abc').valid, true);
+  });
 
-    assert.ok(room.includes('tenant-abc'));
-    assert.ok(room.includes('cita-123'));
-    // Dos citas distintas no pueden caer en la misma sala.
-    assert.notEqual(room, roomNameFor('tenant-abc', 'cita-124'));
-    assert.notEqual(room, roomNameFor('tenant-abd', 'cita-123'));
+  it('descarta el fragmento y guarda una forma canónica', () => {
+    const verdict = parseMeetingLink('https://meet.google.com/abc#algo');
+
+    assert.equal(verdict.valid, true);
+    if (!verdict.valid) return;
+    assert.equal(verdict.link.url.includes('#'), false);
+  });
+
+  it('el texto para mostrar quita el protocolo', () => {
+    assert.equal(
+      describeMeetingLink({ provider: 'meet', url: 'https://meet.google.com/abc' }),
+      'meet.google.com/abc',
+    );
+  });
+
+  it('el motivo del rechazo dice qué hacer', () => {
+    const verdict = parseMeetingLink('https://zoom.us/j/123');
+
+    assert.equal(verdict.valid, false);
+    if (verdict.valid) return;
+    assert.match(verdict.reason, /Meet/);
   });
 });
 

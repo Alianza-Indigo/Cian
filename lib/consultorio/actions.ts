@@ -17,6 +17,7 @@ import {
   setAppointmentStatus,
   setRecordingConsent,
   setSessionTaskStatus,
+  setAppointmentMeetingUrl,
   setVerificationStatus,
   upsertProfessionalProfile,
 } from '../db/repositories/consultorio';
@@ -50,6 +51,7 @@ const profileSchema = z.object({
   licenseNumber: z.string().max(60).optional(),
   bio: z.string().max(2000).optional(),
   acceptTerms: z.boolean(),
+  defaultMeetingUrl: z.string().max(500).optional(),
 });
 
 export async function saveProfessionalProfileAction(
@@ -460,5 +462,24 @@ export async function saveWhiteboardAction(
     return { ok: true };
   } catch (error) {
     return fail(error, 'No pudimos guardar la pizarra.');
+  }
+}
+
+/** El profesional fija un enlace distinto para una cita concreta. */
+export async function setAppointmentMeetingUrlAction(
+  appointmentId: string,
+  url: string,
+): Promise<ConsultorioActionResult> {
+  if (!idSchema.safeParse(appointmentId).success) {
+    return { ok: false, error: 'Cita no válida.' };
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    await setAppointmentMeetingUrl(ctx, appointmentId, url);
+    revalidatePath('/consultorio');
+    return { ok: true, message: 'Enlace actualizado.' };
+  } catch (error) {
+    return fail(error, 'No pudimos guardar el enlace.');
   }
 }

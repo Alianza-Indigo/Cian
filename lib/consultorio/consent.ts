@@ -1,28 +1,32 @@
 /**
  * Consentimiento de grabación. Fase 10.
  *
- * Criterio de aceptación, y está escrito en negativo a propósito:
+ * El criterio del PRD lo escribe en negativo:
  *
  * > La grabación es **imposible de iniciar** sin consentimiento registrado de
  * > ambas partes.
  *
- * «Imposible», no «desaconsejado». Por eso esto es una función pura que decide
- * y una prueba que lo comprueba, y no una casilla en la interfaz: una casilla
- * la puede saltar cualquiera que llame a la API directamente.
+ * ## Hasta dónde llega esto, con honestidad
  *
- * ## Cómo se sostiene la imposibilidad
+ * La videollamada ocurre en Google Meet, y **CIAN no puede impedir
+ * técnicamente que alguien grabe dentro de Meet**. Quien controla eso es
+ * Google y quien maneja la reunión.
  *
- * Tres capas, y las tres hacen falta:
+ * Así que este módulo hace lo que sí puede hacer, y no finge lo demás:
  *
- * 1. **Aquí**: `canStartRecording` exige una firma de cada rol.
- * 2. **En el token de LiveKit**: el permiso `roomRecord` solo se concede
- *    cuando esta función dice que sí. Sin ese permiso, el servidor de medios
- *    rechaza la grabación aunque el cliente la pida.
- * 3. **En la base**: las firmas se guardan con sello de tiempo del servidor,
- *    así que después se puede responder «¿quién autorizó esto y cuándo?».
+ * - Registra el acuerdo de ambas partes con **sello de tiempo del servidor**,
+ *   de modo que después se pueda responder «¿quién autorizó esto y cuándo?».
+ * - Exige las **dos** firmas: ni el profesional puede grabar «porque es su
+ *   consulta» ni la persona puede hacerlo sin que el profesional lo sepa.
+ * - Permite **retirar** la autorización, y basta con una para que el acuerdo
+ *   deje de existir.
+ * - Si algún día la videollamada vuelve a un servidor de medios propio, esta
+ *   misma función es la que decidiría el permiso técnico. La pieza está lista;
+ *   lo que falta es el servidor.
  *
- * Un consentimiento que solo vive en la interfaz no es un consentimiento: es
- * un aviso.
+ * La interfaz dice esto mismo con `RECORDING_NOTICE`. Prometer «imposible» en
+ * una consulta de salud cuando solo es «acordado» sería una mentira con
+ * consecuencias.
  */
 import type { ConsentSignature, RecordingConsent } from './types';
 

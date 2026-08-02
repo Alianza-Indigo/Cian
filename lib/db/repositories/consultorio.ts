@@ -38,7 +38,7 @@ import {
   type VerificationStatus,
   type WhiteboardState,
 } from '../../consultorio/types';
-import { roomNameFor } from '../../consultorio/livekit';
+import { parseMeetingLink } from '../../consultorio/meeting';
 
 // --- Perfil profesional ------------------------------------------------------
 
@@ -67,6 +67,8 @@ export type ProfessionalProfileInput = {
   bio?: string | null;
   acceptTerms: boolean;
   termsVersion: string;
+  /** Enlace de Google Meet donde atiende. Se valida antes de guardarlo. */
+  defaultMeetingUrl?: string | null;
 };
 
 /**
@@ -118,9 +120,22 @@ export async function upsertProfessionalProfile(
       existing.specialties.slice().sort().join(',') !==
         input.specialties.slice().sort().join(','));
 
+  /*
+   * El enlace se valida aquí y no solo en el formulario: un campo de URL libre
+   * que después se pinta como enlace, dentro de una plataforma de salud, es una
+   * vía de phishing.
+   */
+  let meetingUrl: string | null = null;
+  if (input.defaultMeetingUrl?.trim()) {
+    const verdict = parseMeetingLink(input.defaultMeetingUrl);
+    if (!verdict.valid) throw new Error(verdict.reason);
+    meetingUrl = verdict.link.url;
+  }
+
   const values = {
     specialties: input.specialties,
     licenseNumber: license,
+    defaultMeetingUrl: meetingUrl,
     bio: input.bio?.trim().slice(0, 2000) || null,
     termsAcceptedAt: new Date(),
     termsVersion: input.termsVersion,
@@ -387,9 +402,8 @@ export async function requestAppointment(
       clientUserId: ctx.userId,
       scheduledAt: input.scheduledAt,
       durationMinutes: duration,
-      // El nombre de la sala lo deriva el servidor. Si lo eligiera el cliente,
-      // cualquiera podría entrar a la consulta de otra persona adivinándolo.
-      roomId: roomNameFor(ctx.tenantId, id),
+      // Referencia interna de la sesión, derivada por el servidor.
+      roomId: `cian-${ctx.tenantId}-${id}`,
       reason: input.reason?.trim().slice(0, 1000) || null,
     })
     .returning();
@@ -947,4 +961,62 @@ export async function saveWhiteboard(
       target: whiteboardStates.sessionId,
       set: { state: trimmed, updatedAt: new Date() },
     });
+}
+
+// --- Enlace de la videollamada ----------------------------------------------
+
+/**
+ * El enlace de Meet de una cita.
+ *
+ * Primero el de la cita, si lo tiene; si no, el que el profesional dejó en su
+ * perfil. Devuelve `null` cuando no hay ninguno, que es un caso normal: un
+ * profesional puede no haberlo configurado todavía y la interfaz lo dice.
+ *
+ * **No lleva `TenantContext` porque la comprobación de acceso ya la hizo quien
+ * llama** —`getAppointmentForParticipant`, en la misma petición—, y lo que se
+ * le pasa aquí son identificadores ya verificados. Aun así filtra por tenant.
+ */
+export async function meetingUrlForAppointment(
+  tenantId: string,
+  appointmentId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      own: appointments.meetingUrl,
+      fallback: professionals.defaultMeetingUrl,
+    })
+    .from(appointments)
+    .innerJoin(professionals, eq(professionals.id, appointments.professionalId))
+    .where(
+      and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId)),
+    )
+    .limit(1);
+
+  return row?.own ?? row?.fallback ?? null;
+}
+
+/** El profesional puede fijar un enlace distinto para una cita concreta. */
+export async function setAppointmentMeetingUrl(
+  ctx: TenantContext,
+  appointmentId: string,
+  rawUrl: string,
+): Promise<void> {
+  const found = await getAppointmentForParticipant(ctx, appointmentId);
+  if (!found) throw new Error('No encontramos esa cita.');
+  if (found.role !== 'profesional') {
+    throw new Error('El enlace de la videollamada lo pone el profesional.');
+  }
+
+  const verdict = parseMeetingLink(rawUrl);
+  if (!verdict.valid) throw new Error(verdict.reason);
+
+  await db
+    .update(appointments)
+    .set({ meetingUrl: verdict.link.url })
+    .where(
+      and(
+        eq(appointments.id, appointmentId),
+        eq(appointments.tenantId, ctx.tenantId),
+      ),
+    );
 }

@@ -7,12 +7,25 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ## 2026-08-02 — Fase 10
 
-### El nombre de la sala lo deriva el servidor
+### La videollamada la pone Google Meet
 
-`roomNameFor(tenantId, appointmentId)`. Si el cliente pudiera pedir un nombre
-arbitrario, adivinar uno sería entrar a la consulta de otra persona. Se guarda
-en `appointments.room_id` al reservar y la ruta del token lo lee de ahí; en
-ningún punto se acepta un nombre de sala que venga de fuera.
+Decisión del responsable. CIAN no transporta audio ni vídeo: pone la agenda, el
+control de acceso al enlace, las notas, la pizarra, las tareas y el
+consentimiento. Es coherente con lo que el PRD dice del módulo —CIAN
+proporciona la infraestructura, no el servicio— y deja el proyecto entero sin
+una sola dependencia fuera de la lista autorizada.
+
+Tiene un costo, y se asume con los ojos abiertos: el criterio de la grabación
+con consentimiento deja de ser una imposibilidad técnica y pasa a ser un
+acuerdo registrado. La alternativa era instalar un SDK de WebRTC. Está
+detallado en NOTES.md.
+
+### El enlace de la reunión no viaja en el HTML
+
+Se pide a una ruta que comprueba, en ese instante, participación, estado de la
+cita y ventana horaria. El HTML de una página se guarda en el historial, se
+copia al compartir pantalla y sobrevive a que la cita se cancele; una respuesta
+de API no.
 
 ### La única lectura de citas pasa por `getAppointmentForParticipant`
 

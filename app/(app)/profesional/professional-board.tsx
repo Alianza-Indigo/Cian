@@ -33,6 +33,7 @@ type Profile = {
   specialties: Specialty[];
   licenseNumber: string | null;
   bio: string | null;
+  defaultMeetingUrl: string | null;
   verificationStatus: VerificationStatus;
   termsAcceptedAt: string | null;
 };
@@ -82,6 +83,7 @@ export function ProfessionalBoard({
   );
   const [licenseNumber, setLicenseNumber] = useState(profile?.licenseNumber ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
+  const [meetingUrl, setMeetingUrl] = useState(profile?.defaultMeetingUrl ?? '');
   const [accepted, setAccepted] = useState(Boolean(profile?.termsAcceptedAt));
 
   const [weekday, setWeekday] = useState(2);
@@ -191,6 +193,27 @@ export function ProfessionalBoard({
             />
           </div>
 
+          <div className="mt-4">
+            <label htmlFor="meet" className="text-sm font-medium">
+              Tu enlace de Google Meet
+            </label>
+            <input
+              id="meet"
+              type="url"
+              value={meetingUrl}
+              onChange={(event) => setMeetingUrl(event.target.value)}
+              className={`mt-1 ${inputClass}`}
+              style={{ minHeight: 'var(--cian-control-height)' }}
+              placeholder="https://meet.google.com/abc-defg-hij"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              La videollamada ocurre en Meet. CIAN controla quién ve este enlace
+              y cuándo —solo las dos personas de la cita, y solo alrededor de su
+              hora—, pero no lo que pase dentro de la reunión. Sin enlace, nadie
+              puede entrar a la videollamada.
+            </p>
+          </div>
+
           {/* --- Términos --------------------------------------------------- */}
           <div className="mt-4 rounded-lg border border-border p-3">
             <h3 className="text-sm font-semibold">{PROFESSIONAL_TERMS_TITLE}</h3>
@@ -224,6 +247,7 @@ export function ProfessionalBoard({
                   specialties,
                   licenseNumber: licenseNumber || undefined,
                   bio: bio || undefined,
+                  defaultMeetingUrl: meetingUrl || undefined,
                   acceptTerms: accepted,
                 }),
               )

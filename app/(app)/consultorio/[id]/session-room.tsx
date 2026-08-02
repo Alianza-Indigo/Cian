@@ -15,6 +15,7 @@ import {
   type SessionTaskStatus,
   type WhiteboardState,
 } from '@/lib/consultorio/types';
+import { RECORDING_NOTICE } from '@/lib/consultorio/meeting';
 import {
   addSessionNoteAction,
   assignSessionTaskAction,
@@ -51,7 +52,7 @@ type Props = {
   durationMinutes: number;
   status: AppointmentStatus;
   otherPartyUserId: string | null;
-  videoConfigured: boolean;
+  hasMeetingLink: boolean;
   consent: { mine: boolean; both: boolean };
   notes: Note[];
   tasks: Task[];
@@ -239,31 +240,28 @@ export function SessionRoom(props: Props) {
   }
 
   /**
-   * Pide el token de la sala.
+   * Pide el enlace de Meet y abre la reunión.
    *
-   * El servidor comprueba participación, estado de la cita, ventana horaria y
-   * consentimiento antes de firmar nada. Aquí solo se muestra lo que responda:
-   * la conexión WebRTC necesita `livekit-client`, que todavía no está.
+   * El enlace no está en esta página a propósito: se pide en el momento, y el
+   * servidor comprueba entonces participación, estado de la cita y ventana
+   * horaria. Así un enlace no sobrevive a que la cita se cancele.
+   *
+   * Se abre en una pestaña nueva para no perder las notas ni la pizarra, que
+   * es justo lo que se usa durante la sesión.
    */
   async function joinRoom() {
-    setVideoState('Pidiendo acceso a la sala…');
+    setVideoState('Abriendo la videollamada…');
 
     const response = await fetch(`/api/consultorio/sala/${props.appointmentId}`);
-    const payload = (await response.json()) as {
-      error?: string;
-      room?: string;
-      puedeGrabar?: boolean;
-    };
+    const payload = (await response.json()) as { error?: string; url?: string };
 
-    if (!response.ok) {
-      setVideoState(payload.error ?? 'No pudimos abrir la sala.');
+    if (!response.ok || !payload.url) {
+      setVideoState(payload.error ?? 'No pudimos abrir la videollamada.');
       return;
     }
 
-    setVideoState(
-      `Acceso concedido a la sala ${payload.room}. Falta el cliente de video ` +
-        'para conectar: ver la nota de abajo.',
-    );
+    setVideoState('Se abrió Google Meet en otra pestaña.');
+    window.open(payload.url, '_blank', 'noopener,noreferrer');
   }
 
   return (
@@ -294,16 +292,25 @@ export function SessionRoom(props: Props) {
         </h2>
 
         <Card className="mt-3">
-          {!props.videoConfigured ? (
+          {!props.hasMeetingLink ? (
             <p className="text-sm text-muted-foreground">
-              La videollamada no está configurada en esta instalación. El resto
-              de la sesión —notas, tareas, pizarra y resumen— funciona igual.
+              {isProfessional
+                ? 'Todavía no pusiste tu enlace de Google Meet. Lo configuras en tu perfil profesional; sin él, nadie puede entrar a la videollamada.'
+                : 'El profesional todavía no ha puesto el enlace de la videollamada. El resto de la sesión funciona igual.'}
             </p>
           ) : (
             <>
-              <Button type="button" onClick={() => void joinRoom()}>
+              <p className="text-sm text-muted-foreground">
+                La videollamada ocurre en Google Meet. Se abre en otra pestaña
+                para que las notas y la pizarra sigan aquí.
+              </p>
+              <Button
+                type="button"
+                className="mt-3"
+                onClick={() => void joinRoom()}
+              >
                 <Video aria-hidden="true" />
-                Entrar a la sala
+                Abrir la videollamada
               </Button>
               {videoState ? (
                 <p className="mt-2 text-sm text-muted-foreground">{videoState}</p>
@@ -320,10 +327,10 @@ export function SessionRoom(props: Props) {
         </h2>
 
         <Card className="mt-3">
-          <p className="text-sm text-muted-foreground">
-            La sesión solo puede grabarse si las dos personas lo autorizan. Basta
-            con que una retire su autorización para que deje de ser posible, y
-            queda registrado quién autorizó y cuándo.
+          <p className="text-sm text-muted-foreground">{RECORDING_NOTICE}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Hace falta que las dos personas autoricen, y basta con que una lo
+            retire para que el acuerdo deje de existir.
           </p>
 
           <div className="mt-3">
@@ -345,7 +352,7 @@ export function SessionRoom(props: Props) {
           {!props.consent.both ? (
             <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
               <VideoOff aria-hidden="true" className="size-4 shrink-0" />
-              Ahora mismo no se puede grabar.
+              Sin acuerdo para grabar.
             </p>
           ) : null}
         </Card>

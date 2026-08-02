@@ -8,9 +8,9 @@ import {
   getWhiteboard,
   listSessionNotes,
   listSessionTasks,
+  meetingUrlForAppointment,
 } from '@/lib/db/repositories/consultorio';
 import { canStartRecording, hasSigned } from '@/lib/consultorio/consent';
-import { livekitConfigured } from '@/lib/consultorio/livekit';
 import { SessionRoom } from './session-room';
 
 export const metadata: Metadata = { title: 'Sesión' };
@@ -34,11 +34,14 @@ export default async function SesionPage({
 
   const session = await ensureSession(ctx, id);
 
-  const [notes, tasks, summary, whiteboard] = await Promise.all([
+  const [notes, tasks, summary, whiteboard, meetingUrl] = await Promise.all([
     listSessionNotes(ctx, session.id),
     listSessionTasks(ctx, session.id),
     getSessionSummary(ctx, session.id),
     getWhiteboard(ctx, session.id),
+    // Solo para saber si hay enlace. El enlace en sí no viaja en el HTML: se
+    // pide a la ruta, que comprueba la ventana horaria en ese instante.
+    meetingUrlForAppointment(ctx.tenantId, id),
   ]);
 
   return (
@@ -52,7 +55,7 @@ export default async function SesionPage({
       otherPartyUserId={
         found.role === 'profesional' ? found.appointment.clientUserId : null
       }
-      videoConfigured={livekitConfigured()}
+      hasMeetingLink={Boolean(meetingUrl)}
       consent={{
         mine: hasSigned(session.recordingConsent, found.role),
         both: canStartRecording(session.recordingConsent).allowed,

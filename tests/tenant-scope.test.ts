@@ -229,6 +229,7 @@ import {
   requestAppointment,
   saveWhiteboard,
   sessionNotesQuery,
+  setAppointmentMeetingUrl,
   setAppointmentStatus,
   setSessionTaskStatus,
   setVerificationStatus,
@@ -792,6 +793,15 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     [
       'saveWhiteboard',
       (ctx) => saveWhiteboard(ctx as TenantContext, CONV, { strokes: [] }),
+    ],
+    [
+      'setAppointmentMeetingUrl',
+      (ctx) =>
+        setAppointmentMeetingUrl(
+          ctx as TenantContext,
+          CONV,
+          'https://meet.google.com/abc-defg-hij',
+        ),
     ],
   ];
 
