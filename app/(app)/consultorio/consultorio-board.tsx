@@ -211,10 +211,10 @@ export function ConsultorioBoard({
               sin verificar no aparece aquí y no puede recibir citas.
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Quien administra el espacio puede invitar a un profesional desde
-              Administración → Miembros, con el rol de profesional. Registrarse
-              por su cuenta no basta: eso crea un espacio nuevo, no entra al
-              tuyo.
+              Quien administra el espacio da de alta a un profesional desde
+              Administración → Profesionales: ahí se le invita, se revisan sus
+              documentos y se le verifica. Registrarse por su cuenta no basta:
+              eso crea un espacio nuevo, no entra al tuyo.
             </p>
           </Card>
         ) : (

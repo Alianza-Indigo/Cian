@@ -2,25 +2,39 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getAdminContext } from '@/lib/admin/access';
 import { listProfessionals } from '@/lib/db/repositories/consultorio';
+import { listInvitations } from '@/lib/db/repositories/memberships';
 import { VerificationBoard } from './verification-board';
 
 export const metadata: Metadata = { title: 'Profesionales' };
 export const dynamic = 'force-dynamic';
 
 /**
- * Alta y verificación de profesionales del espacio.
+ * El alta de un profesional, entera y en una sola pantalla.
  *
- * Estaba dentro de «Perfil profesional», debajo del formulario del perfil
- * propio, y ese era el problema: quien administra entraba a una pantalla que
- * se llama como si fuera suya para dar de alta a otros. Son dos tareas de
- * naturaleza distinta y ahora viven separadas.
+ * ## Por qué está todo junto aquí
+ *
+ * Dar de alta a alguien que atiende son tres pasos —invitarle, que rellene su
+ * perfil, verificarle— y estaban repartidos en tres pantallas distintas:
+ * «Miembros», «Perfil profesional» y el panel. Ninguna se llamaba como la tarea,
+ * así que quien administraba tenía que saberse el recorrido de memoria.
+ *
+ * Aquí se ve el proceso completo: a quién se invitó y sigue sin contestar, quién
+ * ya rellenó su perfil y espera revisión, y quién está verificado y aparece en
+ * el consultorio. Invitar desde aquí manda el rol de profesional puesto, que es
+ * el error fácil de cometer desde la pantalla general de miembros.
+ *
+ * `/admin/miembros` sigue existiendo para el resto de roles; esto no la
+ * sustituye, la especializa.
  */
 export default async function AdminProfesionalesPage() {
   const admin = await getAdminContext();
   if (!admin) notFound();
 
-  // `false` = también los que están pendientes; son justo los que hay que ver.
-  const roster = await listProfessionals(admin.ctx, false);
+  const [roster, invitations] = await Promise.all([
+    // `false` = también los pendientes; son justo los que hay que revisar.
+    listProfessionals(admin.ctx, false),
+    listInvitations(admin.ctx),
+  ]);
 
   return (
     <VerificationBoard
@@ -37,6 +51,17 @@ export default async function AdminProfesionalesPage() {
         termsAcceptedAt: entry.termsAcceptedAt?.toISOString() ?? null,
         isMe: entry.userId === admin.ctx.userId,
       }))}
+      /*
+       * Solo las invitaciones de profesionales. Las demás se administran en
+       * Miembros: enseñarlas aquí convertiría esta pantalla en la otra.
+       */
+      invitations={invitations
+        .filter((invitation) => invitation.role === 'professional')
+        .map((invitation) => ({
+          id: invitation.id,
+          email: invitation.email,
+          expiresAt: invitation.expiresAt.toISOString(),
+        }))}
     />
   );
 }

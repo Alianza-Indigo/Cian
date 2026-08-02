@@ -138,8 +138,13 @@ export function MembersBoard({
         <p className="mt-1 text-sm text-muted-foreground">
           Esto es distinto del equipo de apoyo. Ahí compartes cosas sueltas con
           gente de fuera; aquí la persona entra al espacio y trabaja dentro de
-          él. Para que un profesional aparezca en el consultorio tiene que estar
-          aquí, con el rol de profesional.
+          él.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Para dar de alta a alguien que atiende, usa{' '}
+          <strong>Profesionales</strong>: ahí está el alta entera —invitar,
+          revisar documentos y verificar—, que es lo que hace falta para que
+          aparezca en el consultorio.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {seats.used} de {seats.total}{' '}

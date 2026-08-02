@@ -52,6 +52,23 @@ resto de la administración del espacio. De paso la lista ahora enseña los
 documentos de cédula, que son justo lo que hay que mirar para verificar, y dice
 cuándo no hay ninguno.
 
+**Corrección inmediata, porque se rompió otra cosa al arreglar esta.** Mover la
+verificación al panel dejó el alta repartida en tres pantallas —invitar en
+«Miembros», rellenar el perfil en «Mi perfil profesional», verificar en
+«Profesionales»— y **ninguna se llamaba como la tarea**. El reporte fue
+literalmente «desapareció donde dar de alta a los profesionales»: el enlace
+estaba, la tarea no.
+
+Ahora `/admin/profesionales` es el alta entera: los tres pasos escritos arriba,
+el formulario de invitación con el rol ya puesto —el error fácil de cometer
+desde la pantalla general de miembros—, los invitados que no han contestado y
+los perfiles por verificar. «Miembros» sigue existiendo para el resto de roles y
+apunta aquí; el consultorio vacío también.
+
+La lección, y vale para todo el proyecto: **agrupar por naturaleza técnica no es
+lo mismo que agrupar por tarea.** Separar «mis datos» de «datos de otros» era
+correcto y aun así empeoró la pantalla, porque la tarea real cruzaba las dos.
+
 ### Lo que no se había visto: cualquiera podía tocar la suscripción
 
 `startCheckoutAction` y `openBillingPortalAction` comprobaban el contexto de
