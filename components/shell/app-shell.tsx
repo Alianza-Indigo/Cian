@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Brain,
+  BookOpen,
   CheckSquare,
+  GraduationCap,
   FileText,
   ListChecks,
   Menu,
@@ -34,6 +36,8 @@ export type NavItem = {
     | 'sensorialidad'
     | 'tareas'
     | 'alimentacion'
+    | 'educacion'
+    | 'biblioteca'
     | 'documentos'
     | 'memorias'
     | 'configuracion';
@@ -45,6 +49,8 @@ const ICONS = {
   sensorialidad: Sparkles,
   tareas: CheckSquare,
   alimentacion: UtensilsCrossed,
+  educacion: GraduationCap,
+  biblioteca: BookOpen,
   documentos: FileText,
   memorias: Brain,
   configuracion: Settings,

@@ -5,6 +5,89 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 6 — Educación y biblioteca inteligente
+
+### Los 1536 del PRD se conservaron
+
+El PRD fija `vector(1536)`, una dimensión que venía del proveedor anterior.
+`gemini-embedding-001` permite configurar la dimensión de salida, así que se
+mantuvo el número tal cual: el cambio de proveedor no obligó a desviarse del
+documento.
+
+Cambiar `EMBEDDING_DIMENSIONS` obliga a reindexar toda la biblioteca y a migrar
+la columna. No es un ajuste, es una operación. Hay una prueba que lo fija.
+
+`taskType` va distinto al indexar (`RETRIEVAL_DOCUMENT`) y al consultar
+(`RETRIEVAL_QUERY`). Son espacios distintos del mismo modelo y mezclarlos
+degrada la recuperación en silencio, que es la peor forma de degradarse.
+
+### pgvector se habilita en `db-setup`, no en una migración
+
+`CREATE EXTENSION IF NOT EXISTS vector` corre antes de aplicar migraciones.
+Drizzle no lo emite por su cuenta, y ponerlo dentro de un archivo de migración
+no serviría para una base que ya tiene migraciones anteriores. Si falla, avisa
+y sigue: el resto del despliegue no depende de la biblioteca.
+
+### Reindexar no rompe consultas en curso
+
+Es criterio de aceptación y está resuelto por construcción: el reemplazo de
+fragmentos ocurre **por recurso y dentro de una transacción**. Mientras uno se
+reescribe los demás siguen consultables, y ese uno pasa de su versión anterior
+a la nueva sin quedar vacío en medio.
+
+Además, un recurso cuyo contenido no cambió se salta por huella `sha256`, y con
+él el costo de sus embeddings.
+
+### Las citas no dependen de que el modelo se acuerde
+
+Criterio: «toda respuesta que use la biblioteca cita el recurso de forma
+visible». Las citas se leen de la **salida de `searchLibrary`**, no del texto
+del modelo. Si dependieran de que el modelo las escriba, una respuesta apoyada
+en la biblioteca podría quedarse sin fuente. Así la cita aparece porque la
+búsqueda ocurrió.
+
+### La búsqueda degrada en vez de fallar
+
+Sin embeddings —sin clave del modelo, o el proveedor caído— la búsqueda cae a
+coincidencia de texto. Peor recuperación es mejor que ninguna. También cae al
+texto cuando la búsqueda vectorial no supera el umbral de similitud.
+
+Ese umbral (0.35) existe porque sin él cualquier consulta devuelve siempre
+cinco resultados, vengan o no a cuento: el índice ordena por cercanía relativa,
+no por pertinencia.
+
+### Lo que no se pudo verificar
+
+1. **Que `searchLibrary` responda en menos de 500 ms.** El índice HNSW está en
+   la migración, pero medirlo exige base con contenido indexado.
+2. **Que la biblioteca se indexe.** Requiere clave del modelo y base de datos.
+3. **Que los recursos de un tenant no se filtren a otro.** Está resuelto por
+   construcción —las consultas filtran `tenant_id IS NULL OR tenant_id = ?`— y
+   cubierto por el aislamiento, pero la prueba con dos tenants sembrados sigue
+   pendiente desde la Fase 0.
+
+### Configuración nueva en Vercel
+
+- **`CRON_SECRET`** (`openssl rand -hex 32`). Sin él la ruta de reindexado se
+  niega a correr: dejarla abierta permitiría a cualquiera provocar el costo de
+  reindexar la biblioteca entera.
+- El cron ya está declarado en `vercel.json`: lunes a las 8:00 UTC.
+
+### Deuda técnica
+
+- **El intérprete de frontmatter está escrito a mano.** Son cinco campos de
+  texto y no justifica una dependencia. Si el frontmatter se complica, conviene
+  proponer `gray-matter` antes que estirarlo.
+
+- **No hay forma de cargar recursos propios de un tenant desde la interfaz.**
+  El esquema lo admite (`tenant_id` nullable) y las consultas ya lo respetan,
+  pero la carga llega con el panel administrativo de la Fase 9.
+
+- **La biblioteca no tiene buscador propio en su pantalla.** Se navega por
+  categoría; la búsqueda semántica existe solo a través de la conversación.
+
+---
+
 ## Fase 5 — Sensorialidad, funciones ejecutivas y alimentación
 
 ### El barandal de alimentación está en código, no en el prompt

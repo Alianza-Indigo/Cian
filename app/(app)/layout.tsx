@@ -14,6 +14,8 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: '/tareas', label: 'Tareas', icon: 'tareas' },
   { href: '/sensorialidad', label: 'Sensorialidad', icon: 'sensorialidad' },
   { href: '/alimentacion', label: 'Alimentación', icon: 'alimentacion' },
+  { href: '/educacion', label: 'Educación', icon: 'educacion' },
+  { href: '/biblioteca', label: 'Biblioteca', icon: 'biblioteca' },
   { href: '/documentos', label: 'Documentos', icon: 'documentos' },
   { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
   {

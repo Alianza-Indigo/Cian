@@ -146,6 +146,19 @@ import {
   saveShoppingList,
   updateFoodProfile,
 } from '../lib/db/repositories/nutrition';
+import {
+  getResourceBySlug,
+  listLibraryResources,
+  searchLibrary,
+  searchLibraryByText,
+} from '../lib/db/repositories/library';
+import {
+  createEducationItem,
+  deleteEducationItem,
+  getEducationItem,
+  linkEducationDocument,
+  listEducationItems,
+} from '../lib/db/repositories/education';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -468,6 +481,31 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       'getShoppingListForPlan',
       (ctx) => getShoppingListForPlan(ctx as TenantContext, CONV),
     ],
+
+    // --- Fase 6: biblioteca y educación -------------------------------------
+    ['searchLibrary', (ctx) => searchLibrary(ctx as TenantContext, 'ruido')],
+    [
+      'searchLibraryByText',
+      (ctx) => searchLibraryByText(ctx as TenantContext, 'ruido'),
+    ],
+    ['listLibraryResources', (ctx) => listLibraryResources(ctx as TenantContext)],
+    ['getResourceBySlug', (ctx) => getResourceBySlug(ctx as TenantContext, 'x')],
+    [
+      'createEducationItem',
+      (ctx) =>
+        createEducationItem(ctx as TenantContext, {
+          kind: 'adaptacion',
+          title: 'Adaptación',
+          payload: {},
+        }),
+    ],
+    ['getEducationItem', (ctx) => getEducationItem(ctx as TenantContext, CONV)],
+    ['listEducationItems', (ctx) => listEducationItems(ctx as TenantContext)],
+    [
+      'linkEducationDocument',
+      (ctx) => linkEducationDocument(ctx as TenantContext, CONV, CONV),
+    ],
+    ['deleteEducationItem', (ctx) => deleteEducationItem(ctx as TenantContext, CONV)],
   ];
 
 describe('assertTenantContext', () => {

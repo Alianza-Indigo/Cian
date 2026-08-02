@@ -37,6 +37,27 @@ if (!process.env.POSTGRES_URL) {
 
 const db = drizzle(pool);
 
+/*
+ * pgvector tiene que existir ANTES de la migración que crea la columna
+ * `vector`, y Drizzle no emite `CREATE EXTENSION` por su cuenta. Va aquí y no
+ * dentro de un archivo de migración para que se aplique también en una base
+ * que ya tenga migraciones anteriores.
+ */
+console.log('[db-setup] Asegurando la extensión pgvector…');
+try {
+  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+  console.log('[db-setup] pgvector disponible.');
+} catch (error) {
+  console.warn(
+    '[db-setup] No se pudo habilitar pgvector:',
+    error instanceof Error ? error.message : String(error),
+  );
+  console.warn(
+    '[db-setup] La biblioteca de la Fase 6 necesita esta extensión. En Neon se\n' +
+      '[db-setup] habilita sola; en otros Postgres puede requerir permisos de superusuario.',
+  );
+}
+
 console.log('[db-setup] Aplicando migraciones…');
 await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 console.log('[db-setup] Migraciones al día.');

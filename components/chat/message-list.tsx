@@ -10,6 +10,7 @@ import { humanizeChatError } from '@/lib/ai/client-errors';
 import { DocumentCard } from './document-card';
 import { MessageAttachments } from './message-attachments';
 import { ReadAloud } from './read-aloud';
+import { LibraryCitations } from './library-citations';
 
 type MessageListProps = {
   messages: UIMessage[];
@@ -124,9 +125,17 @@ export function MessageList({
           const text = textOf(message);
           const documents = documentsOf(message);
           const hasFiles = message.parts.some((part) => part.type === 'file');
+          const hasCitations = message.parts.some(
+            (part) => part.type === 'tool-searchLibrary',
+          );
 
-          // Un mensaje sin texto, ni documentos, ni archivos no aporta nada.
-          if (text.length === 0 && documents.length === 0 && !hasFiles) {
+          // Un mensaje sin texto, documentos, archivos ni citas no aporta nada.
+          if (
+            text.length === 0 &&
+            documents.length === 0 &&
+            !hasFiles &&
+            !hasCitations
+          ) {
             return null;
           }
 
@@ -164,6 +173,8 @@ export function MessageList({
                     fallbackTitle={document.titulo}
                   />
                 ))}
+
+                {!isUser ? <LibraryCitations message={message} /> : null}
               </div>
             </article>
           );

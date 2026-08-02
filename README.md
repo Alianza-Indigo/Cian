@@ -11,12 +11,12 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 5 — Vida diaria.** Sensorialidad, funciones ejecutivas y alimentación,
-los tres módulos que comparten patrón: perfil, registro y estrategias. El de
-alimentación tiene un barandal en código que le impide emitir cantidades,
-calorías, metas de peso y restricciones (regla 3.6), verificado con 15 intentos
-adversariales. Se suma a todo lo anterior. Sin crisis, sin biblioteca y sin
-recordatorios: eso llega en las fases siguientes.
+**Fase 6 — Educación y biblioteca inteligente.** Base de conocimiento propia
+con búsqueda semántica sobre `pgvector`, y el módulo educativo: adaptaciones
+con Diseño Universal para el Aprendizaje, agendas visuales y preparación de
+reuniones escolares. Toda respuesta apoyada en la biblioteca cita su fuente. Se
+suma a todo lo anterior. Sin crisis y sin recordatorios: eso llega en las fases
+siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -67,6 +67,8 @@ app/
     sensorialidad/             perfil por sentido y herramientas
     tareas/                    tareas con sus pasos
     alimentacion/              perfil, menú semanal y compras
+    educacion/                 adaptaciones, agendas y reuniones
+    biblioteca/[slug]/         contenido revisado
     documentos/                biblioteca de documentos
     memorias/                  lo que CIAN recuerda de ti
     configuracion/accesibilidad/
@@ -88,6 +90,8 @@ lib/
   attachments/                 validación, extracción y resolución
   sensory/                     sensorialidad y funciones ejecutivas
   nutrition/                   alimentación y su barandal (regla 3.6)
+  library/                     ingesta, embeddings e indexado
+content/library/               recursos en Markdown con frontmatter
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación
