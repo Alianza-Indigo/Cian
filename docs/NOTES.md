@@ -444,13 +444,16 @@ conservar el peor momento de alguien escrito en una tabla.
 
 ### Pendientes de esta fase
 
-- **El modo crisis no se puede activar desde la interfaz.** Solo lo enciende el
-  modelo al llamar a `activateCrisisSupport`. Un botón «necesito ayuda ahora»
-  en `/crisis` que abra una conversación ya en modo crisis sería útil y no
-  estaba en el alcance.
-- **El registro del episodio se hace conversando**, no con un formulario. Para
-  quien prefiera escribirlo directamente falta una pantalla de alta manual en
-  `/crisis`.
+- ~~El modo crisis no se puede activar desde la interfaz.~~ **Resuelto.**
+  `/crisis` abre con «Necesito ayuda ahora», que lleva a una conversación nueva
+  con el primer mensaje ya enviado. El modo crisis lo sigue encendiendo el
+  modelo al llamar a `activateCrisisSupport` —nunca una palabra clave del
+  cliente— pero ya no hace falta acertar con las palabras para llegar ahí.
+- ~~El registro del episodio se hace conversando.~~ **Resuelto.** Hay alta
+  manual en `/crisis`, y pasa por el mismo barandal médico que las tools: no
+  para protegerse del modelo, sino para que la bitácora no acabe siendo un
+  expediente con diagnósticos y dosis escritos por quien no puede
+  diagnosticar.
 - **Sin revisión con lector de pantalla del modo simplificado.** La estructura
   (`section` con `aria-label`, `role="log"` en la respuesta, objetivos táctiles
   de 3.25 rem) está puesta, pero no se ha escuchado.

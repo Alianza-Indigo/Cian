@@ -16,6 +16,15 @@ type ChatProps = {
   isNew: boolean;
   /** Velocidad de lectura por voz configurada por la persona. */
   speechRate: number;
+  /**
+   * Mensaje que se envía solo al abrir, sin que nadie escriba nada.
+   *
+   * Existe para el botón de ayuda inmediata de `/crisis`: quien lo pulsa está
+   * conteniendo una crisis y no puede redactar. Se manda una vez y nunca más
+   * —lo protege `autoSent`—, porque un mensaje que se reenvía al recargar
+   * duplicaría la conversación justo en el peor momento.
+   */
+  autoSend?: string | null;
 };
 
 /** Texto plano de un mensaje, para reeditarlo o reintentarlo. */
@@ -31,10 +40,12 @@ export function Chat({
   initialMessages,
   isNew,
   speechRate,
+  autoSend,
 }: ChatProps) {
   const router = useRouter();
   const [editingText, setEditingText] = useState<string | null>(null);
   const [dismissedCrisisKey, setDismissedCrisisKey] = useState<string | null>(null);
+  const autoSent = useRef(false);
   const urlSynced = useRef(!isNew);
   const historyRefreshed = useRef(!isNew);
 
@@ -142,6 +153,13 @@ export function Chat({
   const crisis = crisisStateOf(messages);
   const crisisKey = crisis ? messages[crisis.messageIndex]?.id ?? null : null;
   const showCrisisMode = crisis !== null && dismissedCrisisKey !== crisisKey;
+
+  // El envío automático va después de `submit` porque lo usa.
+  useEffect(() => {
+    if (!autoSend || autoSent.current || messages.length > 0) return;
+    autoSent.current = true;
+    submit(autoSend, []);
+  }, [autoSend, messages.length, submit]);
 
   const lastUserMessage = [...messages]
     .reverse()

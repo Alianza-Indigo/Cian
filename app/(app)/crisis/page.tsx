@@ -23,8 +23,8 @@ export default async function CrisisPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Crisis</h1>
         <p className="mt-2 text-muted-foreground">
-          La bitácora de lo que ha pasado y de lo que ha servido. Con el tiempo
-          aparecen patrones que en el momento no se ven, y esto es lo que CIAN
+          Acompañamiento en el momento y bitácora de lo que ha servido. Con el
+          tiempo aparecen patrones que en caliente no se ven, y es lo que CIAN
           consulta antes de proponerte nada.
         </p>
       </div>

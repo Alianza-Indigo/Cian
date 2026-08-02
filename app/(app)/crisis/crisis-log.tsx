@@ -3,17 +3,30 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Target, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import {
+  Check,
+  LifeBuoy,
+  NotebookPen,
+  Target,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
+  CRISIS_OUTCOMES,
   CRISIS_OUTCOME_LABELS,
+  CRISIS_SEVERITIES,
+  CRISIS_SEVERITY_HINTS,
   CRISIS_SEVERITY_LABELS,
   type CrisisAction,
   type CrisisOutcome,
   type CrisisSeverity,
   type CrisisStep,
 } from '@/lib/crisis/types';
+import { EMERGENCY_NUMBER } from '@/lib/crisis/escalation';
 import {
   MIN_EPISODES_FOR_PATTERNS,
   TIME_BAND_LABELS,
@@ -25,6 +38,7 @@ import {
 import {
   deleteCrisisEventAction,
   deleteCrisisProtocolAction,
+  logCrisisEpisodeAction,
   setProtocolActiveAction,
 } from '@/lib/crisis/actions';
 
@@ -88,6 +102,12 @@ export function CrisisLog({
   const [status, setStatus] = useState('');
   const [isPending, startTransition] = useTransition();
 
+  const [logging, setLogging] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [severity, setSeverity] = useState<CrisisSeverity>('moderada');
+  const [triggers, setTriggers] = useState('');
+  const [outcome, setOutcome] = useState<CrisisOutcome | ''>('');
+
   /*
    * Los patrones se calculan aquí, en el navegador, y no en el servidor.
    *
@@ -120,11 +140,192 @@ export function CrisisLog({
     });
   }
 
+  const inputClass =
+    'w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground ' +
+    'focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
   return (
     <div style={{ display: 'grid', gap: 'var(--cian-section-gap)' }}>
       <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
         {isPending ? 'Trabajando…' : status}
       </p>
+
+      {/*
+        Lo primero de la pantalla, y a propósito.
+
+        La bitácora se mira en frío; este botón se busca en caliente, con una
+        mano y sin leer. Si estuviera al final, debajo de los patrones, no
+        serviría para lo único que tiene que servir.
+      */}
+      <Card>
+        <h2 className="text-sm font-semibold">¿Está pasando ahora?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          CIAN te acompaña paso a paso con lo que ya sabe que le funciona a esta
+          persona. No hace falta que expliques nada primero.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            href="/?crisis=1"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 text-base font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            style={{ minHeight: '3.25rem' }}
+          >
+            <LifeBuoy aria-hidden="true" className="size-5" />
+            Necesito ayuda ahora
+          </Link>
+
+          <a
+            href={`tel:${EMERGENCY_NUMBER}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-5 text-base font-medium text-foreground hover:bg-danger/15 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            style={{ minHeight: '3.25rem' }}
+          >
+            Llamar al {EMERGENCY_NUMBER}
+          </a>
+        </div>
+
+        <p className="mt-2 text-xs text-muted-foreground">
+          Si hay riesgo de vida, lesión grave o una emergencia médica, llama al{' '}
+          {EMERGENCY_NUMBER}. CIAN no es un servicio de urgencias.
+        </p>
+      </Card>
+
+      {/* --- Registrar a mano ---------------------------------------------- */}
+      {logging ? (
+        <Card>
+          <h2 className="text-sm font-semibold">Registrar un episodio</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Para anotarlo sin tener que contarlo en una conversación.
+          </p>
+
+          <div className="mt-3" style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
+            <div>
+              <label htmlFor="crisis-resumen" className="text-sm font-medium">
+                Qué pasó
+              </label>
+              <textarea
+                id="crisis-resumen"
+                rows={4}
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                placeholder="Llegó de la escuela y no paraba de llorar. Nos fuimos al cuarto y bajamos la luz."
+              />
+            </div>
+
+            <div>
+              <label htmlFor="crisis-intensidad" className="text-sm font-medium">
+                Intensidad
+              </label>
+              <select
+                id="crisis-intensidad"
+                value={severity}
+                onChange={(event) =>
+                  setSeverity(event.target.value as CrisisSeverity)
+                }
+                className={`mt-1 ${inputClass}`}
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              >
+                {CRISIS_SEVERITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {CRISIS_SEVERITY_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {CRISIS_SEVERITY_HINTS[severity]}
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="crisis-disparadores" className="text-sm font-medium">
+                Qué lo disparó{' '}
+                <span className="text-muted-foreground">(separado por comas)</span>
+              </label>
+              <input
+                id="crisis-disparadores"
+                type="text"
+                value={triggers}
+                onChange={(event) => setTriggers(event.target.value)}
+                className={`mt-1 ${inputClass}`}
+                style={{ minHeight: 'var(--cian-control-height)' }}
+                placeholder="ruido del comedor, cambio de rutina"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="crisis-final" className="text-sm font-medium">
+                Cómo terminó
+              </label>
+              <select
+                id="crisis-final"
+                value={outcome}
+                onChange={(event) =>
+                  setOutcome(event.target.value as CrisisOutcome | '')
+                }
+                className={`mt-1 ${inputClass}`}
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              >
+                <option value="">Prefiero no anotarlo</option>
+                {CRISIS_OUTCOMES.filter((value) => value !== 'se_derivo').map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {CRISIS_OUTCOME_LABELS[value]}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={isPending || summary.trim().length === 0}
+                onClick={() =>
+                  run(async () => {
+                    const result = await logCrisisEpisodeAction({
+                      summary,
+                      severity,
+                      triggers: triggers
+                        .split(',')
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                      actionsTaken: [],
+                      outcome: outcome || null,
+                    });
+
+                    if (result.ok) {
+                      setSummary('');
+                      setTriggers('');
+                      setOutcome('');
+                      setLogging(false);
+                    }
+                    return result;
+                  }, 'Episodio registrado.')
+                }
+              >
+                Guardar
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLogging(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className="justify-self-start"
+          onClick={() => setLogging(true)}
+        >
+          <NotebookPen aria-hidden="true" />
+          Registrar un episodio
+        </Button>
+      )}
 
       {/* --- Patrones ------------------------------------------------------ */}
       <section aria-labelledby="patrones">
