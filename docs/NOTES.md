@@ -5,6 +5,63 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Transversal — Cerrar sesión daba error
+
+Reportado en uso. La causa no tenía nada que ver con cerrar sesión: la
+introduje yo al construir las membresías.
+
+### Qué pasaba
+
+`lib/tenant/actions.ts` lleva `'use server'`, y de ahí exporté tres constantes
+—`INVITABLE_ROLES`, `ROLE_LABELS`, `ROLE_HINTS`— para que las usara la pantalla
+de miembros. **Un archivo `'use server'` solo puede exportar funciones
+asíncronas.**
+
+Lo peligroso es cuándo se nota:
+
+- `tsc --noEmit`: limpio.
+- `pnpm test`: limpio.
+- `next build`: limpio, y el despliegue sale verde.
+- En ejecución, al invocar **cualquier** server action del mismo paquete: 500 y
+  `A "use server" file can only export async functions, found object.`
+
+No rompe solo la acción culpable, se lleva por delante todas las que compartan
+paquete. Por eso el síntoma fue el botón de cerrar sesión, que no tiene ninguna
+relación con los roles de un espacio. El síntoma no señalaba a la causa por
+ningún lado.
+
+Las constantes se mudan a `lib/tenant/roles.ts`, un módulo normal.
+
+### Cómo se encontró, porque el método importa
+
+No se dedujo leyendo: se reprodujo. Se levantó la aplicación con `next start`,
+se sacó el identificador de la server action del manifiesto de la build
+(`.next/server/server-reference-manifest.json` y el chunk del cliente) y se
+invocó por HTTP con la cabecera `Next-Action`. El error salió entero en el log
+del servidor, con su traza.
+
+Dos trampas de ese proceso que conviene recordar si hay que repetirlo:
+
+- **`npx next build | head -3` puede matar el build a mitad** por SIGPIPE y
+  dejar `.next` a medias, lo que da resultados falsos. Los builds de
+  verificación van a un archivo, sin recortar.
+- El identificador de una server action **cambia en cada build**: hay que volver
+  a sacarlo después de recompilar.
+
+### La red que queda puesta
+
+`tests/server-actions.test.ts` recorre `lib/`, `app/` y `components/`, encuentra
+los archivos con la directiva y comprueba que cada `export` sea una función
+asíncrona o un tipo. Comprobado que falla si se reintroduce el fallo.
+
+Es una comprobación de texto, no un análisis sintáctico: no hay parser de
+TypeScript en las pruebas y meter uno sería una dependencia nueva por algo que
+se ve mirando las líneas que empiezan por `export`. Eso la hace conservadora, y
+si algún día hace falta una forma válida que no contempla, lo que toca es
+ampliar la lista, no borrar la prueba.
+
+---
+
 ## Transversal — El menú no se podía recorrer en teléfono
 
 Reportado en uso: «el menú queda muy expandido, en móvil no permite hacer

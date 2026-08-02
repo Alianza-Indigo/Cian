@@ -22,6 +22,9 @@ import {
 import { findActiveMembership } from '../db/repositories/tenants';
 import { recordAudit } from '../db/repositories/audit';
 import { sendEmail, tenantInvitationEmail } from '../notifications/email';
+// Las constantes viven aparte porque este archivo es `'use server'`: exportar
+// de aquí algo que no sea una función asíncrona rompe el módulo en ejecución.
+import { INVITABLE_ROLES } from './roles';
 
 export type TenantActionResult =
   | { ok: true; message?: string; inviteUrl?: string }
@@ -43,28 +46,6 @@ async function baseUrl(): Promise<string> {
   const protocol = host?.startsWith('localhost') ? 'http' : 'https';
   return host ? `${protocol}://${host}` : (process.env.AUTH_URL ?? '');
 }
-
-/**
- * Roles invitables.
- *
- * `owner` no está y no es un olvido: la propiedad del espacio se transfiere
- * desde dentro, no viaja en un enlace de correo.
- */
-export const INVITABLE_ROLES = ['admin', 'professional', 'member'] as const;
-
-export const ROLE_LABELS: Record<string, string> = {
-  owner: 'Propietaria',
-  admin: 'Administra',
-  professional: 'Profesional',
-  member: 'Integrante',
-};
-
-export const ROLE_HINTS: Record<(typeof INVITABLE_ROLES)[number], string> = {
-  admin: 'Puede invitar, retirar y ver el panel del espacio.',
-  professional:
-    'Aparece en el consultorio y puede atender citas. No administra el espacio.',
-  member: 'Usa el espacio con normalidad. No administra ni atiende citas.',
-};
 
 const inviteSchema = z.object({
   email: z.email().max(320),

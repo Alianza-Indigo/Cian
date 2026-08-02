@@ -10,25 +10,27 @@ import {
   changeMemberRoleAction,
   inviteToTenantAction,
   removeMemberAction,
+} from '@/lib/tenant/actions';
+import {
   INVITABLE_ROLES,
   ROLE_HINTS,
   ROLE_LABELS,
-} from '@/lib/tenant/actions';
-
-type InvitableRole = (typeof INVITABLE_ROLES)[number];
+  type InvitableRole,
+} from '@/lib/tenant/roles';
+import type { MemberRole } from '@/lib/tenant/guard';
 
 type Member = {
   userId: string;
   name: string | null;
   email: string | null;
-  role: string;
+  role: MemberRole;
   status: string;
 };
 
 type Invitation = {
   id: string;
   email: string;
-  role: string;
+  role: MemberRole;
   expiresAt: string;
 };
 
@@ -235,7 +237,7 @@ export function MembersBoard({
                         {invitation.email}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {ROLE_LABELS[invitation.role] ?? invitation.role} · vence
+                        {ROLE_LABELS[invitation.role]} · vence
                         el {dateFormat.format(new Date(invitation.expiresAt))}
                       </p>
                     </div>
@@ -337,7 +339,7 @@ export function MembersBoard({
                        * invitar: transferir la propiedad desde dentro, viendo
                        * a quién se la das, es distinto de mandarla por correo.
                        */}
-                      {['owner', ...INVITABLE_ROLES].map((value) => (
+                      {(['owner', ...INVITABLE_ROLES] as MemberRole[]).map((value) => (
                         <option key={value} value={value}>
                           {ROLE_LABELS[value]}
                         </option>
