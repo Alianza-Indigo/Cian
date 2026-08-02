@@ -31,6 +31,7 @@ export default async function SecuenciaPage({ params }: PageProps) {
         title: step.title,
         durationSeconds: step.durationSeconds,
         icon: step.icon,
+        imageUrl: step.imageUrl,
         note: step.note,
       }))}
     />

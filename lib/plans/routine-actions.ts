@@ -62,6 +62,35 @@ export async function addStepAction(
   }
 }
 
+/**
+ * Pone o quita la imagen de un paso.
+ *
+ * `routine_steps.image_url` existía desde la Fase 3 y no había forma de
+ * escribirla: la columna estaba, y una secuencia visual sin imágenes es solo
+ * una lista. Quien usa apoyos visuales es justo quien más necesita esta
+ * pantalla.
+ *
+ * La ruta se valida en el repositorio, que solo admite `/api/adjuntos/<id>`.
+ */
+export async function setStepImageAction(
+  routineId: string,
+  stepId: string,
+  imageUrl: string | null,
+): Promise<RoutineActionResult> {
+  if (!idSchema.safeParse(routineId).success) return fail('Rutina no válida.');
+  if (!idSchema.safeParse(stepId).success) return fail('Paso no válido.');
+
+  try {
+    const ctx = await requireTenantContext();
+    await updateRoutineStep(ctx, stepId, { imageUrl });
+    revalidatePath(`/rutinas/${routineId}`);
+    revalidatePath(`/rutinas/${routineId}/secuencia`);
+    return { ok: true };
+  } catch {
+    return fail('No pudimos guardar la imagen.');
+  }
+}
+
 export async function updateStepAction(
   routineId: string,
   stepId: string,

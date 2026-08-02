@@ -22,7 +22,12 @@ export default async function RutinaPage({ params }: PageProps) {
   const routine = await getRoutine(ctx, id);
   if (!routine) notFound();
 
-  const logs = await listRoutineLogs(ctx, routine.id, 20);
+  /*
+   * Más de los que caben en pantalla: la tira de constancia son cuatro semanas
+   * y la racha más larga puede venir de mucho antes. Con veinte registros
+   * «tu mejor racha» sería «los últimos veinte días» y no es lo mismo.
+   */
+  const logs = await listRoutineLogs(ctx, routine.id, 200);
 
   return (
     <RoutineDetail
@@ -37,12 +42,12 @@ export default async function RutinaPage({ params }: PageProps) {
           title: step.title,
           durationSeconds: step.durationSeconds,
           icon: step.icon,
+          imageUrl: step.imageUrl,
           note: step.note,
         })),
       }}
       logs={logs.map((log) => ({
         id: log.id,
-        completedSteps: log.completedSteps.length,
         completedAt: log.completedAt.toISOString(),
       }))}
     />

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowDown, ArrowUp, Play, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ImagePlus, Play, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleField } from '@/components/ui/toggle-field';
@@ -13,11 +13,14 @@ import {
   totalDuration,
   type RoutineType,
 } from '@/lib/plans/types';
+import { summarizeStreak } from '@/lib/plans/streaks';
+import { uploadAttachments } from '@/lib/attachments/client';
 import {
   addStepAction,
   deleteRoutineAction,
   deleteStepAction,
   reorderStepsAction,
+  setStepImageAction,
   updateRoutineAction,
 } from '@/lib/plans/routine-actions';
 
@@ -26,6 +29,7 @@ type Step = {
   title: string;
   durationSeconds: number | null;
   icon: string | null;
+  imageUrl: string | null;
   note: string | null;
 };
 
@@ -38,13 +42,19 @@ type RoutineView = {
   steps: Step[];
 };
 
-type LogEntry = { id: string; completedSteps: number; completedAt: string };
+type LogEntry = { id: string; completedAt: string };
 
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date(iso));
+const dayFormat = new Intl.DateTimeFormat('es-MX', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
+
+function describeLastDone(daysAgo: number | null): string {
+  if (daysAgo === null) return 'Todavía no la has completado ninguna vez.';
+  if (daysAgo === 0) return 'La última vez fue hoy.';
+  if (daysAgo === 1) return 'La última vez fue ayer.';
+  return `La última vez fue hace ${daysAgo} días.`;
 }
 
 export function RoutineDetail({
@@ -58,6 +68,22 @@ export function RoutineDetail({
   const [status, setStatus] = useState('');
   const [isPending, startTransition] = useTransition();
   const [title, setTitle] = useState(routine.title);
+  const [uploadingStep, setUploadingStep] = useState<string | null>(null);
+
+  /*
+   * La constancia se calcula aquí, en el navegador, y no en el servidor: «hoy»
+   * y «ayer» dependen del huso de quien mira. En un servidor en UTC, una rutina
+   * hecha a las nueve de la noche en Ciudad de México cae en el día siguiente y
+   * rompería la racha sin que haya pasado nada.
+   */
+  const streak = useMemo(
+    () =>
+      summarizeStreak(
+        logs.map((log) => new Date(log.completedAt)),
+        new Date(),
+      ),
+    [logs],
+  );
   const [newStep, setNewStep] = useState('');
   const [newMinutes, setNewMinutes] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -92,6 +118,37 @@ export function RoutineDetail({
     run(
       () => reorderStepsAction(routine.id, ordered),
       `Paso movido ${direction === -1 ? 'arriba' : 'abajo'}.`,
+    );
+  }
+
+  /**
+   * Sube una imagen y la deja pegada al paso.
+   *
+   * Pasa por `/api/adjuntos`, el mismo camino que los adjuntos del chat: queda
+   * en almacenamiento privado y se sirve por una ruta que comprueba el tenant.
+   * La foto de la cocina de una familia no es contenido público.
+   */
+  async function attachImage(stepId: string, file: File) {
+    setUploadingStep(stepId);
+    setStatus('Subiendo la imagen…');
+
+    const upload = await uploadAttachments([file]);
+    setUploadingStep(null);
+
+    if (!upload.ok) {
+      setStatus(upload.error);
+      return;
+    }
+
+    const attachment = upload.attachments[0];
+    if (!attachment) {
+      setStatus('No pudimos subir la imagen.');
+      return;
+    }
+
+    run(
+      () => setStepImageAction(routine.id, stepId, attachment.url),
+      'Imagen guardada.',
     );
   }
 
@@ -178,6 +235,58 @@ export function RoutineDetail({
                           {step.note}
                         </p>
                       ) : null}
+
+                      {step.imageUrl ? (
+                        <div className="mt-2 flex items-start gap-2">
+                          {/*
+                            * Sin `next/image`: la ruta es privada y pasa por
+                            * `/api/adjuntos`, que comprueba el tenant en cada
+                            * petición. El optimizador la volvería a pedir desde
+                            * el servidor, sin sesión, y no la obtendría.
+                            */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={step.imageUrl}
+                            alt={`Apoyo visual de "${step.title}"`}
+                            className="h-24 w-24 rounded-lg border border-border object-cover"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Quitar la imagen de "${step.title}"`}
+                            disabled={isPending}
+                            onClick={() =>
+                              run(
+                                () =>
+                                  setStepImageAction(routine.id, step.id, null),
+                                'Imagen quitada.',
+                              )
+                            }
+                          >
+                            <X aria-hidden="true" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label
+                          className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+                          style={{ minHeight: 'var(--cian-control-height)' }}
+                        >
+                          <ImagePlus aria-hidden="true" className="size-4" />
+                          Agregar una imagen
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            disabled={isPending || uploadingStep !== null}
+                            onChange={(event) => {
+                              const file = event.currentTarget.files?.[0];
+                              event.currentTarget.value = '';
+                              if (file) void attachImage(step.id, file);
+                            }}
+                          />
+                        </label>
+                      )}
                     </div>
 
                     <div className="flex shrink-0 gap-1">
@@ -284,22 +393,66 @@ export function RoutineDetail({
         <section style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
           <h2 className="text-lg font-semibold tracking-tight">Constancia</h2>
           <Card>
-            <p className="text-sm text-muted-foreground">
-              La has completado {logs.length}{' '}
-              {logs.length === 1 ? 'vez' : 'veces'}. Última:{' '}
-              {formatDate(logs[0]?.completedAt ?? '')}.
-            </p>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-              {logs.map((log) => (
+            <div className="flex flex-wrap gap-6">
+              <div>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {streak.currentStreak}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {streak.currentStreak === 1 ? 'día seguido' : 'días seguidos'}
+                </p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {streak.totalDays}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {streak.totalDays === 1 ? 'día en total' : 'días en total'}
+                </p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {streak.longestStreak}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  la racha más larga
+                </p>
+              </div>
+            </div>
+
+            {/*
+              * La tira de cuatro semanas. Los días sin hacer se ven en gris
+              * suave y no en rojo: es un registro, no una boleta.
+              */}
+            <ul
+              className="mt-4 flex flex-wrap gap-1"
+              aria-label="Últimas cuatro semanas"
+            >
+              {streak.recentDays.map((day) => (
                 <li
-                  key={log.id}
-                  className="rounded-md bg-primary-soft px-2 py-1 text-xs"
-                  title={`${log.completedSteps} pasos`}
-                >
-                  {formatDate(log.completedAt)}
-                </li>
+                  key={day.key}
+                  title={`${dayFormat.format(day.date)}: ${
+                    day.done ? 'hecha' : 'sin registrar'
+                  }`}
+                  aria-label={`${dayFormat.format(day.date)}: ${
+                    day.done ? 'hecha' : 'sin registrar'
+                  }`}
+                  className={
+                    day.done
+                      ? 'size-5 rounded-sm bg-primary'
+                      : 'size-5 rounded-sm bg-muted'
+                  }
+                />
               ))}
             </ul>
+
+            <p className="mt-3 text-sm text-muted-foreground">
+              {describeLastDone(streak.lastDoneDaysAgo)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Un día sin hacerla no borra los anteriores. Esto está para que
+              veas lo que sí ha pasado, no para llevarte la cuenta de lo que no.
+            </p>
           </Card>
         </section>
       ) : null}

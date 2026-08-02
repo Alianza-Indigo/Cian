@@ -13,6 +13,7 @@ type Step = {
   title: string;
   durationSeconds: number | null;
   icon: string | null;
+  imageUrl: string | null;
   note: string | null;
 };
 
@@ -137,7 +138,22 @@ export function SequenceRunner({
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-        {step.icon ? (
+        {/*
+          * La imagen manda sobre el emoji cuando la hay: es el apoyo visual de
+          * verdad, y quien la puso lo hizo para verla grande aquí, no en
+          * miniatura en la lista de edición.
+          *
+          * Sin `next/image` porque la ruta es privada: el optimizador la
+          * volvería a pedir desde el servidor, sin sesión, y no la obtendría.
+          */}
+        {step.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={step.imageUrl}
+            alt=""
+            className="max-h-64 w-auto rounded-2xl border border-border object-contain"
+          />
+        ) : step.icon ? (
           <span aria-hidden="true" className="text-6xl">
             {step.icon}
           </span>

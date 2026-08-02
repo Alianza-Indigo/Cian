@@ -21,6 +21,13 @@ export type StepInput = {
   title: string;
   durationSeconds?: number | null;
   icon?: string | null;
+  /**
+   * Ruta de la imagen del paso, siempre a `/api/adjuntos/<id>` y nunca al
+   * almacén: el adjunto es privado y se sirve por una ruta que comprueba el
+   * tenant. Una URL del store sería un enlace público a la foto de la cocina de
+   * alguien.
+   */
+  imageUrl?: string | null;
   note?: string | null;
 };
 
@@ -31,6 +38,20 @@ export type CreateRoutineInput = {
   conversationId?: string | null;
   steps?: StepInput[];
 };
+
+/**
+ * Solo se acepta una ruta a nuestro propio servidor de adjuntos.
+ *
+ * Cualquier otra cosa se descarta en silencio. Sin esto, escribir `image_url`
+ * sería escribir un `<img src>` arbitrario, y una imagen remota en la pantalla
+ * de una rutina le cuenta al servidor de quien la sirve cuándo la abre esta
+ * persona, y desde dónde.
+ */
+function safeAttachmentPath(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return /^\/api\/adjuntos\/[0-9a-f-]{36}$/i.test(trimmed) ? trimmed : null;
+}
 
 function clampDuration(seconds: number | null | undefined): number | null {
   if (seconds === null || seconds === undefined) return null;
@@ -249,6 +270,7 @@ export async function addRoutineStep(
       title,
       durationSeconds: clampDuration(step.durationSeconds),
       icon: step.icon?.trim().slice(0, 8) || null,
+      imageUrl: safeAttachmentPath(step.imageUrl),
       note: step.note?.trim().slice(0, 1000) || null,
     })
     .returning();
@@ -274,6 +296,9 @@ export async function updateRoutineStep(
     patch.durationSeconds = clampDuration(input.durationSeconds);
   }
   if (input.icon !== undefined) patch.icon = input.icon?.trim().slice(0, 8) || null;
+  if (input.imageUrl !== undefined) {
+    patch.imageUrl = safeAttachmentPath(input.imageUrl);
+  }
   if (input.note !== undefined) patch.note = input.note?.trim().slice(0, 1000) || null;
 
   const [row] = await db
