@@ -50,6 +50,8 @@ PWA se prueba con `pnpm build && pnpm start`.
 | `pnpm dev` | Servidor de desarrollo |
 | `pnpm build` | Compilación de producción |
 | `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm lint` | ESLint sobre todo el proyecto |
+| `pnpm lint:strict` | Igual, pero un aviso ya es un fallo. Es el que conviene en CI |
 | `pnpm test` | Pruebas de aislamiento multi-tenant |
 | `pnpm db:generate` | Genera migraciones desde el esquema |
 | `pnpm db:setup` | Aplica migraciones y carga los prompts (corre solo en cada build) |

@@ -81,8 +81,12 @@ export function SequenceRunner({
         >
           <Check className="size-10 text-primary" />
         </div>
+        {/*
+          * Con el nombre de la rutina: quien tiene varias no sabe cuál acaba
+          * de cerrar si la pantalla solo dice «terminada».
+          */}
         <h1 className="mt-6 text-2xl font-semibold tracking-tight">
-          Rutina terminada
+          {title}, terminada
         </h1>
         <p className="mt-2 text-muted-foreground">
           Completaste {completed.length} de {steps.length}{' '}

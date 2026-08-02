@@ -1092,11 +1092,32 @@ store de Postgres.
 
 ### Deuda técnica y decisiones aplazadas
 
-- **Sin ESLint.** `eslint` y `eslint-config-next` no están en la lista de
-  dependencias autorizadas. La sección 4.4 solo exige `build` y `typecheck`
-  limpios, y ambos lo están. Vale la pena proponerlo antes de la Fase 1: con
-  varias personas tocando el código, el linter atrapa cosas que el compilador
-  de tipos no ve.
+- ~~Sin ESLint.~~ **Resuelto, con autorización explícita.** `eslint` y
+  `eslint-config-next` no estaban en la lista de dependencias del PRD, así que
+  el proyecto entero se construyó con `tsc --noEmit` como única red y esto
+  quedó anotado hasta que se pidió instalarlo.
+
+  Se instalaron **solo dos**: `eslint` 9 y `eslint-config-next` fijado a la
+  misma versión que Next (15.5.22), más `@eslint/eslintrc` que hace falta para
+  leer la configuración plana. Nada de `typescript-eslint` con reglas que
+  exigen información de tipos: es otra dependencia grande y otra pasada del
+  compilador en cada ejecución, y `tsc --noEmit` ya cubre lo que aportaría.
+
+  `pnpm add -D eslint eslint-config-next` sin fijar trae ESLint 10 y
+  `eslint-config-next` 16, y los tres plugins que arrastra piden ESLint 9. Si
+  algún día hay que reinstalarlo, conviene fijar las dos versiones.
+
+  **263 archivos, cero errores y cero avisos** a la primera pasada. Los dos
+  únicos hallazgos se corrigieron: la pantalla de secuencia recibía el título
+  de la rutina y no lo usaba —ahora lo enseña al terminar, que quien tiene
+  varias rutinas necesita saber cuál acaba de cerrar— y la propia configuración
+  exportaba un array anónimo.
+
+  Lo que aporta sobre `tsc`, y por lo que valía la pena: dependencias mal
+  declaradas en `useEffect`/`useMemo`, que en React 19 dan datos rancios en
+  pantalla sin error ninguno, y las reglas de accesibilidad de `jsx-a11y`, que
+  en una plataforma cuyo público navega con lector de pantalla no son
+  cosmética.
 
 - **Sin caché de prompts en KV.** La regla 3.5 pide cachear en Vercel KV.
   `getActivePrompt()` va directo a Postgres por ahora, porque `@vercel/kv` es

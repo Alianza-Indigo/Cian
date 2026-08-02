@@ -5,6 +5,35 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ---
 
+## 2026-08-02 — Transversal
+
+### ESLint entra a la lista, con autorización explícita
+
+Decisión del responsable, pedida en estas palabras: «instala eslint».
+
+Importa dejar constancia de **por qué no estaba** desde el principio: el PRD
+trae una lista cerrada de dependencias y su regla de oro dice que no se instala
+nada fuera de ella sin preguntar. La sección 4.4 solo exige `build` y
+`typecheck` limpios, y ambos lo estuvieron durante las once fases. El linter
+quedó anotado en NOTES.md como lo primero que convenía proponer, y así se hizo.
+
+**Alcance de lo instalado**, que es la parte que conviene no ampliar sin
+pensarlo: `eslint` 9, `eslint-config-next` fijado a la misma versión que Next, y
+`@eslint/eslintrc` para leer la configuración plana. Tres paquetes de
+desarrollo, ninguno llega al navegador.
+
+Se descartó `typescript-eslint` con reglas que exigen información de tipos:
+duplica la pasada del compilador en cada ejecución y `tsc --noEmit` ya cubre lo
+que aportaría. También se descartaron las reglas de formato: el estilo del
+código ya es consistente y discutirlo con una herramienta no arregla nada.
+
+Lo que sí aporta y no tenía sustituto: dependencias mal declaradas en
+`useEffect`/`useMemo` —en React 19 producen datos rancios en pantalla sin error
+alguno— y las reglas de accesibilidad de `jsx-a11y`. Lo segundo pesa más que lo
+primero en este proyecto.
+
+---
+
 ## 2026-08-02 — Fase 10
 
 ### La videollamada la pone Google Meet
