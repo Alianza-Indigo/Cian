@@ -92,7 +92,7 @@ export type StripeResult<T> =
 
 async function stripeRequest<T>(
   path: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | null,
 ): Promise<StripeResult<T>> {
   const key = process.env.STRIPE_SECRET_KEY;
 
@@ -105,14 +105,15 @@ async function stripeRequest<T>(
   }
 
   try {
+    // `null` = lectura. Stripe usa GET sin cuerpo para consultar un recurso.
     const response = await fetch(`${STRIPE_API}${path}`, {
-      method: 'POST',
+      method: body === null ? 'GET' : 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Stripe-Version': STRIPE_VERSION,
       },
-      body: encodeForm(body),
+      ...(body === null ? {} : { body: encodeForm(body) }),
     });
 
     const payload = (await response.json()) as Record<string, unknown>;
@@ -202,6 +203,24 @@ export async function createPortalSession(input: {
   }
 
   return { ok: true, data: { url: result.data.url } };
+}
+
+/**
+ * Lee una suscripción tal como está **ahora mismo** en Stripe.
+ *
+ * La usa el reconciliador. El webhook es el camino normal y este es el de
+ * seguridad: un webhook puede perderse —Stripe reintenta y se rinde, la
+ * aplicación puede estar caída durante un despliegue, el secreto puede rotarse
+ * a mitad—, y el resultado sería una suscripción cancelada hace un mes que en
+ * la base sigue activa, o al revés: alguien que pagó y no tiene su plan.
+ */
+export async function fetchSubscription(
+  subscriptionId: string,
+): Promise<StripeResult<Record<string, unknown>>> {
+  return stripeRequest<Record<string, unknown>>(
+    `/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    null,
+  );
 }
 
 // --- Verificación de la firma ------------------------------------------------

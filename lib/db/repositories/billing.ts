@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNull, or, sql, sum } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNotNull, isNull, or, sql, sum } from 'drizzle-orm';
 import { db } from '../client';
 import {
   modelConfigs,
@@ -104,6 +104,48 @@ export async function syncSubscriptionFromStripe(input: {
       .set({ plan: grantsAccess(input.status) ? input.plan : 'free' })
       .where(eq(tenants.id, input.tenantId));
   });
+}
+
+/**
+ * Suscripciones que tienen algo que reconciliar contra Stripe.
+ *
+ * Sin `TenantContext`, como `syncSubscriptionFromStripe` y por lo mismo: la
+ * llama el cron, que no actúa en nombre de nadie. Devuelve solo lo mínimo para
+ * consultar Stripe —el identificador de la suscripción y qué creemos que es—,
+ * nunca datos de las personas.
+ */
+export async function listSubscriptionsToReconcile(
+  limit = 500,
+): Promise<
+  Array<{
+    tenantId: string;
+    stripeSubscriptionId: string;
+    plan: Plan;
+    status: SubscriptionStatus;
+    seats: number;
+    currentPeriodEnd: Date | null;
+    cancelAtPeriodEnd: boolean;
+  }>
+> {
+  const rows = await db
+    .select({
+      tenantId: subscriptions.tenantId,
+      stripeSubscriptionId: subscriptions.stripeSubscriptionId,
+      plan: subscriptions.plan,
+      status: subscriptions.status,
+      seats: subscriptions.seats,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+    })
+    .from(subscriptions)
+    .where(isNotNull(subscriptions.stripeSubscriptionId))
+    .limit(Math.min(Math.max(limit, 1), 1000));
+
+  return rows.flatMap((row) =>
+    row.stripeSubscriptionId
+      ? [{ ...row, stripeSubscriptionId: row.stripeSubscriptionId }]
+      : [],
+  );
 }
 
 /** Busca el tenant a partir de identificadores de Stripe, sin metadatos. */

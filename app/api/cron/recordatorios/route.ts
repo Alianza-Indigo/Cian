@@ -1,8 +1,8 @@
 /**
  * Barrido de recordatorios.
  *
- * Lo llama Vercel Cron cada quince minutos (ver `vercel.json`). Lee todos los
- * recordatorios activos, decide cuáles tocan en esta ventana y despacha.
+ * Lo llama Vercel Cron una vez al día (ver `vercel.json`). Lee todos los
+ * recordatorios activos, decide cuáles tocan hoy y despacha.
  *
  * Cerrada con `CRON_SECRET`, como el reindexado: sin el secreto configurado la
  * ruta se niega a correr. Aquí importa más todavía, porque una llamada suelta

@@ -5,6 +5,71 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Transversal — Membresías de espacio
+
+Esto no pertenece a una fase: se descubrió al preguntar «¿cómo añades a
+médicos?» y resultó ser el hueco que rompía tres fases a la vez.
+
+### La única línea que creaba una membresía
+
+Estaba en `lib/auth/provisioning.ts`: al entrar por primera vez, cada persona
+recibía su espacio personal como `owner`. No había forma de meter a nadie más en
+un espacio. Cada consecuencia parecía una limitación aislada y por eso no se
+veía:
+
+- **El consultorio (Fase 10)** solo lista profesionales del propio espacio, así
+  que un médico que se registraba caía en el suyo y nadie podía reservarle. La
+  fase entera era inutilizable con terceros.
+- **Los asientos (Fase 9)** estaban definidos en `plan_limits` y cobrados en el
+  checkout, y sin aplicar, porque no había dónde aplicarlos.
+- **El selector de espacios (Fase 0)** no tenía sentido: nadie pertenecía a más
+  de uno.
+
+### No es el equipo de apoyo, y no conviene fundirlos
+
+`support_team_members` (Fase 8) comparte **recursos sueltos** con gente de
+fuera, y pertenecer a él no da acceso a nada por sí solo. `tenant_invitations`
+es lo contrario: entrar a un espacio es trabajar dentro de él con un rol.
+
+Son dos mecanismos y dos rutas de aceptación (`/invitacion/[token]` y
+`/unirme/[token]`) a propósito. Mezclar «te comparto este plan» con «trabajas en
+mi organización» en un solo camino con un `if` acaba dando a alguien más de lo
+que se le quiso dar el día que una de las dos cambie.
+
+### Decisiones que conviene no revertir sin leer esto
+
+- **`owner` no se puede invitar por correo.** Se transfiere desde dentro, viendo
+  a quién se le da. Una invitación que concede la propiedad del espacio es
+  demasiado poder viajando en un enlace.
+- **Ni `changeMemberRole` ni `removeMember` dejan el espacio sin propietario.**
+  De ese estado no se sale sin tocar la base a mano: no se podría invitar, ni
+  verificar profesionales, ni cancelar la suscripción.
+- **Las invitaciones pendientes ocupan asiento.** Si no contaran, se podrían
+  mandar veinte invitaciones con tres asientos y el límite se descubriría al
+  aceptar la cuarta, dejando fuera a alguien después de haberle escrito.
+- **Los asientos se comprueban otra vez al aceptar**, no solo al invitar: entre
+  una cosa y otra el plan pudo bajar o pudo entrar alguien más.
+
+### La tercera excepción sin `TenantContext`
+
+`acceptTenantInvitation` no lo recibe, junto a `listMembershipsForUser` y al
+invitado de la Fase 8. Quien acepta viene de su propia cuenta y todavía no
+pertenece a ese espacio: exigir contexto haría imposible la operación.
+
+Se limita sola: solo encuentra la fila por el hash de un token que únicamente
+tiene quien recibió el correo, exige que el correo coincida —comparación de
+tiempo constante— y lo único que escribe es la membresía de esa persona en ese
+espacio.
+
+### Pendiente
+
+- **Sin ninguna invitación probada de extremo a extremo**, porque depende de
+  Resend y del proxy de este entorno. La invitación se crea igual sin correo
+  configurado y la pantalla enseña el enlace para pasarlo a mano, como en la
+  Fase 8.
+
+---
+
 ## Fase 10 — Consultorios virtuales
 
 ### La videollamada la pone Google Meet
@@ -169,9 +234,19 @@ pantalla a la disponibilidad de un tercero.
 
 El precio es la deriva: si un webhook se pierde, la tabla queda desactualizada.
 Se acepta porque el error cae del lado generoso —alguien conserva acceso que ya
-no paga— y no del que le quita herramientas a quien las usa. **Falta un
-reconciliador periódico** que compare con Stripe; es el pendiente más claro de
-esta fase.
+no paga— y no del que le quita herramientas a quien las usa.
+
+**Resuelto: hay reconciliador.** `/api/cron/suscripciones` corre una vez al día
+(`0 11 * * *`), pregunta a Stripe por cada suscripción que conocemos y escribe
+lo que Stripe diga, porque Stripe es quien cobró. Solo lee y ajusta lo nuestro:
+no cancela, no cobra y no crea nada allá —un reconciliador que además escribe en
+el proveedor convierte un error de lectura en un cobro—. Si Stripe no responde
+para una fila, esa fila se deja como está: bajarla a `cancelada` por no poder
+leerla sería quitarle el acceso a alguien porque Stripe tuvo un mal minuto.
+
+La comparación (`differs`) y la lectura del objeto (`parseRemote`) son puras y
+están probadas en `tests/reconcile.test.ts`. El barrido completo sigue sin
+verificarse contra Stripe real, como todo lo demás de esta fase.
 
 ### Lo que nunca se limita
 
@@ -192,6 +267,15 @@ siguen indexando en cada despliegue. Un recurso creado en el panel con el mismo
 pantalla marca qué recursos vienen de archivo. Lo limpio sería migrar los
 archivos a la base y quitar el indexado del build, pero eso es una decisión
 sobre de dónde viene el contenido de arranque y no tocaba tomarla aquí.
+
+**Después:** el panel ya no es solo del superadmin. Quien administra un espacio
+publica **para su espacio**, que es lo que la Fase 6 pedía y no existía en
+ninguna pantalla. Eso destapó un fallo de esquema: `library_resources` tenía el
+`slug` único en toda la tabla y el upsert resolvía el conflicto por `slug`, así
+que el primer recurso de un espacio con el nombre de uno global lo habría
+sobrescrito **para toda la plataforma**. Ahora son dos índices únicos parciales,
+uno por ámbito. Dos parciales y no uno de `(tenant_id, slug)` porque en Postgres
+dos `NULL` no chocan entre sí.
 
 ### El panel estaba escondido
 
@@ -225,12 +309,12 @@ configuración, y la pantalla lo dice.
 
 - **Sin ningún pago real probado.** Cuatro de los seis criterios de aceptación
   dependen de una cuenta de Stripe configurada.
-- **Sin reconciliador de suscripciones.** Ver arriba.
-- **Membresías de organización con asientos: a medias.** El esquema tiene
-  `seats` y el checkout los cobra, pero **nada comprueba el límite de asientos
-  al añadir a alguien al espacio**, porque no existe todavía una pantalla para
-  añadir miembros a un tenant —las organizaciones con varias personas no tienen
-  interfaz propia—. El límite está definido y sin aplicar.
+- ~~Sin reconciliador de suscripciones.~~ **Resuelto.** Ver arriba.
+- ~~Membresías de organización con asientos: a medias.~~ **Resuelto.**
+  `/admin/miembros` invita, cambia roles y retira, y `checkSeats` aplica el
+  límite del plan contando las invitaciones pendientes como ocupadas: si no
+  contaran, el tope se descubriría al aceptar, dejando fuera a alguien después
+  de haberle escrito.
 - ~~`plan_limits` no tiene pantalla.~~ **Resuelto.** `/admin/planes`, solo para
   superadmin. Un campo vacío significa «sin límite» y no cero, y el
   almacenamiento se escribe en megabytes: pedir bytes en un formulario es pedir
@@ -535,10 +619,13 @@ no por pertinencia.
 
 ### Configuración nueva en Vercel
 
-- **`CRON_SECRET`** (`openssl rand -hex 32`). Sin él la ruta de reindexado se
-  niega a correr: dejarla abierta permitiría a cualquiera provocar el costo de
-  reindexar la biblioteca entera.
-- El cron ya está declarado en `vercel.json`: lunes a las 8:00 UTC.
+- **`CRON_SECRET`** (`openssl rand -hex 32`). Sin él las rutas de cron se niegan
+  a correr: dejarlas abiertas permitiría a cualquiera provocar el costo de
+  reindexar la biblioteca entera, disparar notificaciones reales o consumir la
+  cuota de la API de Stripe. Es el mismo secreto para las tres.
+- Los crons ya están declarados en `vercel.json`, todos en UTC:
+  reindexado de la biblioteca los lunes a las 8:00, recordatorios diarios a las
+  13:00 y reconciliación de suscripciones diaria a las 11:00.
 
 ### Deuda técnica
 
@@ -546,12 +633,22 @@ no por pertinencia.
   texto y no justifica una dependencia. Si el frontmatter se complica, conviene
   proponer `gray-matter` antes que estirarlo.
 
-- **No hay forma de cargar recursos propios de un tenant desde la interfaz.**
-  El esquema lo admite (`tenant_id` nullable) y las consultas ya lo respetan,
-  pero la carga llega con el panel administrativo de la Fase 9.
+- ~~No hay forma de cargar recursos propios de un tenant desde la interfaz.~~
+  **Resuelto.** `/admin/biblioteca` ya publica en dos ámbitos: quien administra
+  un espacio publica para su espacio, y solo el superadmin publica para todo
+  CIAN. Son dos listas separadas y no una con etiquetas, porque retirar un
+  recurso global afecta a toda la plataforma y retirar uno del espacio no, y esa
+  diferencia tiene que verse antes de pulsar.
 
-- **La biblioteca no tiene buscador propio en su pantalla.** Se navega por
-  categoría; la búsqueda semántica existe solo a través de la conversación.
+- ~~La biblioteca no tiene buscador propio en su pantalla.~~ **Resuelto.**
+  `/biblioteca?buscar=` usa la misma `searchLibrary` que el modelo, con su
+  respaldo textual cuando no hay embeddings.
+
+  Va por la URL y lo resuelve el servidor a propósito: el resultado se puede
+  compartir y guardar en marcadores, funciona sin JavaScript, y quien vuelve con
+  el botón de atrás encuentra lo que estaba mirando. Se deduplica por recurso:
+  la función devuelve fragmentos, y la misma guía repetida cuatro veces parece
+  cuatro guías y esconde las demás.
 
 ---
 
@@ -625,14 +722,25 @@ serio.** Si falla, `model_configs` de la Fase 9 permite modelo por propósito.
 
 ### Deuda técnica
 
-- **Las tareas no tienen fecha límite en la interfaz.** La columna `due_at`
-  existe y la tool puede llenarla, pero no hay selector de fecha.
+- ~~Las tareas no tienen fecha límite en la interfaz.~~ **Resuelto.** Con
+  selector de fecha por tarea. El instante lo construye el navegador a partir
+  del día local: una fecha suelta habría que interpretarla en algún huso, y el
+  del servidor no es el de nadie —en Tijuana, una tarea para el jueves se
+  habría guardado como miércoles—.
 
-- **`prioritizeTasks` no tiene interfaz propia.** Solo se puede reordenar desde
-  la conversación.
+- ~~`prioritizeTasks` no tiene interfaz propia.~~ **Resuelto.** Con dos flechas
+  por tarea, no arrastrando: arrastrar exige puntería y mantener el clic, y no
+  funciona con teclado ni con lector de pantalla.
 
-- **La bitácora sensorial no tiene vista de patrones.** Es una lista de
-  momentos. Los datos están en `sensory_events` para cuando haga falta.
+- ~~La bitácora sensorial no tiene vista de patrones.~~ **Resuelto.**
+  `lib/sensory/patterns.ts`, puro y calculado en el navegador por lo mismo que
+  el de crisis: las franjas horarias dependen del huso de quien mira.
+
+  Dos decisiones que conviene no revertir: «se mantuvo igual» no cuenta ni en
+  lo que ayudó ni en lo que no —es lo único que se sabe de ese registro: nada—,
+  y la intensidad se cuenta por nivel en vez de promediarse, porque un promedio
+  la convierte en una calificación y una calificación invita a bajarla. Por
+  debajo de cinco registros no se enseña nada.
 
 ---
 
@@ -773,13 +881,26 @@ cuando la petición podría resolverse con varias (`createPlan` frente a
 
 ### Deuda técnica
 
-- **`routine_steps.image_url` existe en el esquema pero no hay forma de subir
-  imágenes.** Las imágenes llegan con los adjuntos de la Fase 4. Por ahora solo
-  se admite un emoji como icono.
+- ~~`routine_steps.image_url` existe en el esquema pero no hay forma de subir
+  imágenes.~~ **Resuelto.** Se sube por `/api/adjuntos`, el mismo camino que los
+  adjuntos del chat, así que queda en almacenamiento privado tras una ruta que
+  comprueba el tenant. En la secuencia la imagen manda sobre el emoji: es el
+  apoyo visual de verdad y quien la puso lo hizo para verla grande ahí.
 
-- **La constancia de rutinas es una lista de fechas**, no una vista de
-  patrones. El PRD pide «vista simple de constancia» y eso es lo que hay; si
-  hiciera falta más, los datos ya están en `routine_logs`.
+  El repositorio **solo acepta rutas con la forma `/api/adjuntos/<uuid>`**. Sin
+  eso, escribir `image_url` sería escribir un `<img src>` arbitrario, y una
+  imagen remota en la pantalla de una rutina le cuenta al servidor que la sirve
+  cuándo la abre esta persona y desde dónde.
+
+- ~~La constancia de rutinas es una lista de fechas.~~ **Resuelto.** Racha
+  actual, días en total, racha más larga y una tira de cuatro semanas.
+
+  Las rachas mal hechas castigan, así que: cuenta días distintos y no veces,
+  deja un día de margen —abrir la pantalla por la mañana antes de hacerla no
+  rompe nada—, enseña el total además de la racha porque «56 días» sigue siendo
+  verdad el día después de fallar, y no hay porcentajes de cumplimiento ni días
+  fallados en rojo. Calculado en el navegador: en un servidor en UTC, una rutina
+  hecha a las nueve de la noche en Ciudad de México cae al día siguiente.
 
 - **Editar el título de un plan o una rutina guarda al perder el foco**, sin
   botón. Es cómodo pero poco explícito: alguien que escribe y cierra la pestaña
@@ -1027,7 +1148,11 @@ store de Postgres.
 - `user_preferences.detail_level` ya se guarda y se puede configurar; el prompt
   del orquestador (`prompts/seed/orchestrator.system.md`) ya lo menciona. Solo
   falta inyectarlo en el contexto del modelo.
-- `prompts/seed/safety.disclaimer.md` está sembrado y sin usar todavía. El
-  descargo se muestra hoy como texto fijo en el shell y en el login.
+- ~~`prompts/seed/safety.disclaimer.md` está sembrado y sin usar todavía.~~
+  **Resuelto nueve fases después.** El descargo bajo el campo de escritura se
+  lee de la tabla `prompts`, con el texto corto de respaldo si la base no
+  responde. Estuvo todo ese tiempo editable desde el panel sin que editarlo
+  cambiara nada de lo que se veía. El del login sigue siendo texto fijo: esa
+  pantalla no tiene sesión ni base garantizada.
 - El registro de tools (`buildTools`) y la carpeta `lib/ai/` todavía no existen:
   la Fase 0 se entrega sin IA, tal como pide el PRD.
