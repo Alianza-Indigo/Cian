@@ -5,6 +5,58 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Transversal — El menú no se podía recorrer en teléfono
+
+Reportado en uso: «el menú queda muy expandido, en móvil no permite hacer
+scroll hasta abajo». Eran dos fallos que se sumaban.
+
+### No había ningún contenedor con scroll
+
+`sidebarBody` era una columna de flex con `h-full` y sin `overflow` en ninguna
+parte. La lista de conversaciones era lo único desplazable, porque tenía
+`flex-1 overflow-y-auto`.
+
+El resto —diecisiete secciones más el bloque de cuenta— medía por sí solo más
+que la pantalla de un teléfono. Al no caber, las cajas se encogían por debajo de
+su contenido (que es lo que hace flex por omisión) y ese contenido se salía por
+abajo sin nada que lo desplazara: el pie acababa pintado sobre la lista de
+secciones, y de *Crisis* en adelante no se llegaba a nada.
+
+Medido con Chromium a 390×780, desplazando al fondo todo lo desplazable:
+*Crisis* en `y=803`, *Accesibilidad* en `y=1379` y *Cerrar sesión* en `y=1552`,
+con el viewport acabando en 780. Después del arreglo, las dos últimas caen
+dentro y ninguna sección queda fuera del recorrido del scroll, en 390×780,
+360×640, 390×560 (teclado abierto) y 1280×700.
+
+**Afectaba también al escritorio**, aunque se reportara en teléfono: el mismo
+`sidebarBody` se usa en los dos, y en un portátil de 720p el menú tampoco cabía.
+
+### El cajón se medía contra el viewport equivocado
+
+`fixed inset-y-0` en un teléfono se resuelve contra el viewport grande, el que
+existe con la barra de direcciones escondida. Con la barra a la vista, el último
+tramo del menú quedaba **debajo del navegador**: no era contenido pendiente de
+desplazar, era contenido tapado. Pasa a `top-0` con `h-dvh`, que sigue al
+viewport que de verdad se ve.
+
+De paso desaparece el `h-[calc(100% - 3.5rem)]` que descontaba a ojo la altura
+del botón de cerrar. Un número mágico así deja de cuadrar en cuanto ese botón
+cambie de tamaño.
+
+### Decisiones del arreglo
+
+- **El pie queda fijo**, fuera del scroll. La cuenta y cerrar sesión tienen que
+  estar siempre en el mismo sitio: buscarlas desplazándose es justo lo que le
+  cuesta a quien navega esta plataforma.
+- **La lista de conversaciones tiene tope (`max-h-[40vh]`)** en vez de quedarse
+  con todo el espacio sobrante. Que llegar a *Crisis* dependa de cuántas
+  conversaciones tengas es exactamente lo que no puede pasar.
+- **`min-h-0` en la zona con scroll.** Sin él, un hijo de flex nunca baja de su
+  tamaño de contenido y el `overflow` no llega a activarse: es la mitad del
+  fallo original y el error que se repetiría al tocar esto otra vez.
+
+---
+
 ## Transversal — Membresías de espacio
 
 Esto no pertenece a una fase: se descubrió al preguntar «¿cómo añades a

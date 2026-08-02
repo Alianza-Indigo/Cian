@@ -149,89 +149,132 @@ export function AppShell({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [drawerOpen]);
 
+  /*
+   * Tres franjas: cabecera fija, zona con scroll y pie fijo.
+   *
+   * Antes era una sola columna sin ningún contenedor con scroll. La lista de
+   * conversaciones era lo único que podía desplazarse, y el resto —diecisiete
+   * secciones más el bloque de cuenta— simplemente medía más que la pantalla de
+   * un teléfono. Al no caber, las cajas se encogían por debajo de su contenido y
+   * este se salía por abajo, fuera de todo alcance: el pie se pintaba encima de
+   * la lista de secciones y las últimas quedaban inaccesibles.
+   *
+   * El pie se queda fijo a propósito. Cerrar sesión y la cuenta tienen que estar
+   * siempre en el mismo sitio: buscarlas desplazándose es justo lo que le cuesta
+   * a quien navega esta plataforma.
+   */
+  /*
+   * Tres franjas: cabecera fija, zona con scroll y pie fijo.
+   *
+   * Antes era una sola columna sin ningún contenedor con scroll. La lista de
+   * conversaciones era lo único que podía desplazarse, y el resto —diecisiete
+   * secciones más el bloque de cuenta— simplemente medía más que la pantalla de
+   * un teléfono. Al no caber, las cajas se encogían por debajo de su contenido
+   * y este se salía por abajo, fuera de todo alcance: el pie acababa pintado
+   * sobre la lista de secciones y las últimas quedaban inaccesibles.
+   *
+   * El pie se queda fijo a propósito. La cuenta y cerrar sesión tienen que
+   * estar siempre en el mismo sitio: buscarlas desplazándose es justo lo que le
+   * cuesta a quien navega esta plataforma.
+   */
   const sidebarBody = (
-    <div className="flex h-full flex-col gap-3 p-4">
-      <div className="flex items-center gap-3">
-        <CianMark className="size-9" />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">CIAN</p>
-          <p className="truncate text-xs text-muted-foreground">{tenantName}</p>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* --- Cabecera fija ------------------------------------------------ */}
+      <div className="flex shrink-0 flex-col gap-3 p-4 pb-3">
+        <div className="flex items-center gap-3">
+          <CianMark className="size-9" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">CIAN</p>
+            <p className="truncate text-xs text-muted-foreground">{tenantName}</p>
+          </div>
         </div>
+
+        {spaces && spaces.length > 1 ? (
+          <div>
+            <label
+              htmlFor="selector-espacio"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              Espacio
+            </label>
+            <select
+              id="selector-espacio"
+              value={currentTenantId}
+              disabled={switching}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === currentTenantId) return;
+                setSwitching(true);
+                // Sin `router.refresh()`: la acción revalida el layout entero,
+                // porque al cambiar de espacio cambia absolutamente todo lo que
+                // hay en pantalla, no solo la ruta actual.
+                void switchTenantAction(next).finally(() => setSwitching(false));
+              }}
+              className="mt-1 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              style={{ minHeight: 'var(--cian-control-height)' }}
+            >
+              {spaces.map((space) => (
+                <option key={space.id} value={space.id}>
+                  {space.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        <Link
+          href="/"
+          className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          style={{ minHeight: 'var(--cian-control-height)' }}
+        >
+          <Plus aria-hidden="true" className="size-4" />
+          Nueva conversación
+        </Link>
       </div>
 
-      {spaces && spaces.length > 1 ? (
-        <div>
-          <label
-            htmlFor="selector-espacio"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            Espacio
-          </label>
-          <select
-            id="selector-espacio"
-            value={currentTenantId}
-            disabled={switching}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next === currentTenantId) return;
-              setSwitching(true);
-              // Sin `router.refresh()`: la acción revalida el layout entero,
-              // porque al cambiar de espacio cambia absolutamente todo lo que
-              // hay en pantalla, no solo la ruta actual.
-              void switchTenantAction(next).finally(() => setSwitching(false));
-            }}
-            className="mt-1 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            style={{ minHeight: 'var(--cian-control-height)' }}
-          >
-            {spaces.map((space) => (
-              <option key={space.id} value={space.id}>
-                {space.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+      {/*
+       * --- Zona con scroll ---
+       *
+       * `min-h-0` no es decorativo: sin él, un hijo de flex nunca baja de su
+       * tamaño de contenido y el `overflow` no llega a activarse nunca.
+       */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4">
+        <ConversationHistory conversations={conversations} />
 
-      <Link
-        href="/"
-        className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        style={{ minHeight: 'var(--cian-control-height)' }}
-      >
-        <Plus aria-hidden="true" className="size-4" />
-        Nueva conversación
-      </Link>
+        <nav
+          aria-label="Secciones de CIAN"
+          className="mt-2 border-t border-border py-2"
+        >
+          <ul className="space-y-1">
+            {navItems.map((item) => {
+              const Icon = ICONS[item.icon];
+              const active = pathname.startsWith(item.href);
 
-      <ConversationHistory conversations={conversations} />
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-primary-soft text-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                    style={{ minHeight: 'var(--cian-control-height)' }}
+                  >
+                    <Icon aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </div>
 
-      <nav aria-label="Secciones de CIAN" className="border-t border-border pt-2">
-        <ul className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = ICONS[item.icon];
-            const active = pathname.startsWith(item.href);
-
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-                    active
-                      ? 'bg-primary-soft text-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                  style={{ minHeight: 'var(--cian-control-height)' }}
-                >
-                  <Icon aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <div className="border-t border-border pt-3">
+      {/* --- Pie fijo ----------------------------------------------------- */}
+      <div className="shrink-0 border-t border-border p-4">
         {adminHref ? (
           <Link
             href={adminHref}
@@ -275,13 +318,24 @@ export function AppShell({
             onClick={() => setDrawerOpen(false)}
             className="fixed inset-0 z-40 bg-foreground/40"
           />
+          {/*
+            * `h-dvh` y no `inset-y-0`.
+            *
+            * En un teléfono, un elemento fijo con `inset-y-0` se mide contra el
+            * viewport grande, el que existe cuando la barra de direcciones está
+            * escondida. Con la barra a la vista, el último tramo del menú cae
+            * justo debajo del borde y no hay forma de llegar a él: no es
+            * contenido que falte por desplazar, es contenido tapado por el
+            * navegador. `h-dvh` sigue al viewport de verdad, el que cambia
+            * cuando la barra aparece.
+            */}
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Menú de navegación"
-            className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] border-r border-border bg-card"
+            className="fixed left-0 top-0 z-50 flex h-dvh w-80 max-w-[85vw] flex-col border-r border-border bg-card"
           >
-            <div className="flex justify-end p-2">
+            <div className="flex shrink-0 justify-end p-2">
               <Button
                 ref={closeButtonRef}
                 type="button"
@@ -296,7 +350,9 @@ export function AppShell({
                 <X aria-hidden="true" />
               </Button>
             </div>
-            <div className="h-[calc(100%-3.5rem)]">{sidebarBody}</div>
+            {/* Sin `calc(100% - 3.5rem)`: el número mágico dejaba de cuadrar
+                en cuanto la altura del botón de cerrar cambiara. */}
+            <div className="min-h-0 flex-1">{sidebarBody}</div>
           </div>
         </div>
       ) : null}

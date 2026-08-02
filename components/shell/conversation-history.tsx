@@ -72,8 +72,20 @@ export function ConversationHistory({
     });
   }
 
+  /*
+   * Altura acotada, y no `flex-1`.
+   *
+   * Antes esta lista se quedaba con todo el espacio sobrante del menú y era la
+   * única parte que se desplazaba. Con eso, las secciones —Crisis entre ellas—
+   * quedaban empujadas fuera de la pantalla en un teléfono.
+   *
+   * Ahora el menú entero se desplaza y esta lista tiene tope: por muchas
+   * conversaciones que haya, las secciones siguen a un dedo de distancia. Que
+   * llegar a Crisis dependa de cuántas conversaciones tengas es exactamente lo
+   * que no puede pasar.
+   */
   return (
-    <div className="min-w-0 flex-1 overflow-y-auto">
+    <div className="min-w-0 max-h-[40vh] overflow-y-auto">
       <div className="relative mb-2">
         <Search
           aria-hidden="true"
