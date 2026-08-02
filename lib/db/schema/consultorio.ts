@@ -176,6 +176,18 @@ export const appointments = pgTable(
      */
     requestedBy: text('requested_by').notNull().default('usuario'),
     /**
+     * Cita de prueba: la misma persona a los dos lados.
+     *
+     * Existe para que quien pone en marcha un espacio pueda recorrer el
+     * consultorio sin montar dos cuentas reales ni citar a nadie.
+     *
+     * La columna no es decorativa. Una cita de prueba **no** convierte a nadie
+     * en paciente, **no** dispara avisos y se ve marcada en la agenda; sin
+     * distinguirla, probar ensuciaría la lista de personas atendidas y mandaría
+     * notificaciones de una consulta que no existe.
+     */
+    isTest: boolean('is_test').notNull().default(false),
+    /**
      * Cuándo se avisó por última vez de esta cita.
      *
      * Una sola columna para los dos avisos —la víspera y la mañana— porque el

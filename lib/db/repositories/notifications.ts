@@ -305,6 +305,9 @@ export async function listAppointmentsForNotice(
     .where(
       and(
         eq(appointments.status, 'confirmada'),
+        // Avisar de una cita de prueba sería mandar una notificación real de
+        // una consulta que no existe.
+        eq(appointments.isTest, false),
         gte(appointments.scheduledAt, now),
         lte(appointments.scheduledAt, hasta),
       ),

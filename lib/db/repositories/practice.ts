@@ -28,6 +28,7 @@ import { and, asc, count, desc, eq, gte, inArray, lte, or } from 'drizzle-orm';
 import { db } from '../client';
 import {
   appointments,
+  availabilitySlots,
   consultSessions,
   professionals,
   sessionNotes,
@@ -163,6 +164,9 @@ export async function myClients(ctx: TenantContext): Promise<ClientSummary[]> {
         eq(appointments.tenantId, ctx.tenantId),
         eq(appointments.professionalId, professionalId),
         inArray(appointments.status, REALES),
+        // Una cita de prueba no convierte a nadie en paciente, ni siquiera a
+        // uno mismo.
+        eq(appointments.isTest, false),
       ),
     )
     .orderBy(desc(appointments.scheduledAt));
@@ -489,4 +493,159 @@ export async function proposalsForMe(
     .orderBy(asc(appointments.scheduledAt));
 
   return rows;
+}
+
+// --- Modo de prueba ----------------------------------------------------------
+
+/**
+ * Qué falta para que el consultorio funcione de verdad.
+ *
+ * Se comprueban las cuatro cosas de las que depende que alguien pueda reservar
+ * y entrar. Se devuelven todas, no solo la primera que falla: quien está
+ * poniendo esto en marcha prefiere ver la lista entera a descubrirlas de una en
+ * una.
+ */
+export type ConsultorioReadiness = {
+  hasProfile: boolean;
+  isVerified: boolean;
+  hasMeetingUrl: boolean;
+  availabilitySlots: number;
+  ready: boolean;
+};
+
+export async function consultorioReadiness(
+  ctx: TenantContext,
+): Promise<ConsultorioReadiness> {
+  assertTenantContext(ctx, 'consultorioReadiness');
+
+  const [profile] = await db
+    .select()
+    .from(professionals)
+    .where(
+      and(
+        eq(professionals.tenantId, ctx.tenantId),
+        eq(professionals.userId, ctx.userId),
+      ),
+    )
+    .limit(1);
+
+  if (!profile) {
+    return {
+      hasProfile: false,
+      isVerified: false,
+      hasMeetingUrl: false,
+      availabilitySlots: 0,
+      ready: false,
+    };
+  }
+
+  const [slots] = await db
+    .select({ total: count() })
+    .from(availabilitySlots)
+    .where(
+      and(
+        eq(availabilitySlots.tenantId, ctx.tenantId),
+        eq(availabilitySlots.professionalId, profile.id),
+        eq(availabilitySlots.active, true),
+      ),
+    );
+
+  const estado = {
+    hasProfile: true,
+    isVerified: profile.verificationStatus === 'verificado',
+    hasMeetingUrl: Boolean(profile.defaultMeetingUrl),
+    availabilitySlots: slots?.total ?? 0,
+  };
+
+  return {
+    ...estado,
+    ready:
+      estado.isVerified && estado.hasMeetingUrl && estado.availabilitySlots > 0,
+  };
+}
+
+/**
+ * Crea una cita de prueba consigo mismo, abierta ahora.
+ *
+ * **La única salvaguarda que importa: `clientUserId` es siempre `ctx.userId`.**
+ * No es un parámetro y no puede serlo. Sin eso, esto sería una forma de meterse
+ * en la agenda de otra persona con la excusa de probar, que es exactamente el
+ * agujero que un «modo de prueba» abre en cualquier producto donde se cuela.
+ *
+ * Nace confirmada y a la hora actual para que la ventana de entrada esté
+ * abierta: probar no debería exigir esperar quince minutos.
+ */
+export async function createTestAppointment(
+  ctx: TenantContext,
+): Promise<AppointmentRow> {
+  assertTenantContext(ctx, 'createTestAppointment');
+
+  const professionalId = await myProfessionalId(ctx);
+  if (!professionalId) {
+    throw new Error(
+      'Primero rellena tu perfil profesional: la prueba te pone a ti a los dos lados.',
+    );
+  }
+
+  const [row] = await db
+    .insert(appointments)
+    .values({
+      tenantId: ctx.tenantId,
+      professionalId,
+      // Siempre uno mismo. Ver el comentario de arriba.
+      clientUserId: ctx.userId,
+      status: 'confirmada',
+      requestedBy: 'usuario',
+      scheduledAt: new Date(),
+      durationMinutes: 50,
+      roomId: crypto.randomUUID(),
+      reason: 'Cita de prueba',
+      isTest: true,
+    })
+    .returning();
+
+  if (!row) throw new Error('No se pudo crear la cita de prueba.');
+  return row;
+}
+
+export async function listTestAppointments(
+  ctx: TenantContext,
+): Promise<AppointmentRow[]> {
+  assertTenantContext(ctx, 'listTestAppointments');
+
+  return db
+    .select()
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.tenantId, ctx.tenantId),
+        eq(appointments.clientUserId, ctx.userId),
+        eq(appointments.isTest, true),
+      ),
+    )
+    .orderBy(desc(appointments.scheduledAt));
+}
+
+/**
+ * Borra las pruebas propias, con sus sesiones y todo lo que colgaba de ellas.
+ *
+ * Se borra de verdad y no se archiva: son datos que no ocurrieron. Conservar el
+ * rastro de una consulta que nadie tuvo ensucia justo los registros que sirven
+ * para responder qué pasó de verdad.
+ *
+ * Las sesiones, notas, acuerdos y pizarras caen con la cita por la cascada del
+ * esquema.
+ */
+export async function deleteTestAppointments(ctx: TenantContext): Promise<void> {
+  assertTenantContext(ctx, 'deleteTestAppointments');
+
+  await db
+    .delete(appointments)
+    .where(
+      and(
+        eq(appointments.tenantId, ctx.tenantId),
+        eq(appointments.clientUserId, ctx.userId),
+        eq(appointments.isTest, true),
+      ),
+    );
 }

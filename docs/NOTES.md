@@ -59,8 +59,46 @@ saberlo.
 profesional podría meter citas en la agenda de cualquier miembro del espacio. La
 primera cita la sigue pidiendo la persona.
 
+### Modo de prueba, y por qué no es una puerta trasera
+
+Pedido como «necesito un acceso como admin a un consultorio». Al preguntar
+resultó ser lo primero de tres lecturas posibles —probarlo uno mismo, supervisar
+sin ver el contenido, o entrar a sesiones ajenas— y conviene que quede escrito
+que **no se eligió la tercera**.
+
+Hoy ni el dueño de un espacio puede abrir una sesión de la que no es parte:
+`getAppointmentForParticipant` exige ser el profesional o la persona atendida.
+Eso es lo mismo que sostiene el aislamiento entre espacios, y no se tocó.
+
+Lo que se construyó es `createTestAppointment`, en
+`/admin/profesionales → Probar el consultorio`. Crea una cita **con uno mismo a
+los dos lados**, confirmada y a la hora actual para que la sala esté abierta.
+
+**La salvaguarda que importa: `clientUserId` es siempre `ctx.userId` y no es un
+parámetro.** No hay forma de que esto agende con otra persona ni de que abra la
+sesión de nadie. Un modo de prueba que llegue a la agenda ajena deja de ser un
+modo de prueba, y es la forma en que estos modos se cuelan en los productos.
+
+La columna `is_test` no es decorativa: una cita de prueba no convierte a nadie
+en paciente —queda fuera de `myClients`— y no dispara avisos —queda fuera del
+barrido diario—. Sin distinguirla, probar ensuciaría la lista de personas
+atendidas y mandaría notificaciones reales de una consulta que no existe.
+
+Borrar las pruebas borra de verdad, con sus sesiones, notas y pizarras por la
+cascada del esquema. Son datos que no ocurrieron; conservarlos ensucia justo los
+registros que sirven para responder qué pasó de verdad.
+
+**Lo que sigue sin poderse probar así:** la sesión desde los dos lados a la vez.
+El rol se resuelve de quién eres, así que para ver las dos caras hacen falta dos
+cuentas. La pantalla lo dice.
+
 ### Lo que sigue sin existir
 
+- **No hay supervisión del consultorio para quien administra.** Ni cuántas
+  sesiones hay, ni quién atiende a quién, ni ausencias. Se descartó en esta
+  vuelta porque lo que se pidió era otra cosa, pero es lo que necesita quien
+  dirige una clínica para operar, y se puede hacer sin tocar el contenido de
+  ninguna consulta.
 - **No hay cobro por consulta.** Si la monetización pasa por ahí, hace falta
   decidir si CIAN cobra al profesional por usar la herramienta —lo que ya hacen
   los planes— o si intermedia el pago de cada sesión, que es otro producto y

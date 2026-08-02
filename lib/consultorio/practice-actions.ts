@@ -11,7 +11,11 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireTenantContext } from '../tenant/context';
-import { proposeAppointment } from '../db/repositories/practice';
+import {
+  createTestAppointment,
+  deleteTestAppointments,
+  proposeAppointment,
+} from '../db/repositories/practice';
 import { recordAudit } from '../db/repositories/audit';
 
 export type PracticeActionResult =
@@ -76,5 +80,64 @@ export async function proposeAppointmentAction(
       ok: false,
       error: error instanceof Error ? error.message : 'No pudimos proponerla.',
     };
+  }
+}
+
+// --- Modo de prueba ----------------------------------------------------------
+
+/**
+ * Crea una cita de prueba consigo mismo.
+ *
+ * El repositorio pone `clientUserId = ctx.userId` sin aceptar parámetro: no hay
+ * forma de que esto agende con otra persona. Un modo de prueba que pueda tocar
+ * la agenda ajena deja de ser un modo de prueba.
+ */
+export async function createTestAppointmentAction(): Promise<
+  PracticeActionResult & { appointmentId?: string }
+> {
+  try {
+    const ctx = await requireTenantContext();
+    const appointment = await createTestAppointment(ctx);
+
+    await recordAudit(ctx, {
+      action: 'consultorio.test_appointment',
+      entity: 'appointment',
+      entityId: appointment.id,
+    });
+
+    revalidatePath('/admin/profesionales');
+    revalidatePath('/profesional');
+    revalidatePath('/consultorio');
+
+    return {
+      ok: true,
+      message: 'Cita de prueba creada. La sala ya está abierta.',
+      appointmentId: appointment.id,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'No pudimos crearla.',
+    };
+  }
+}
+
+export async function deleteTestAppointmentsAction(): Promise<PracticeActionResult> {
+  try {
+    const ctx = await requireTenantContext();
+    await deleteTestAppointments(ctx);
+
+    await recordAudit(ctx, {
+      action: 'consultorio.test_cleanup',
+      entity: 'appointment',
+    });
+
+    revalidatePath('/admin/profesionales');
+    revalidatePath('/profesional');
+    revalidatePath('/consultorio');
+
+    return { ok: true, message: 'Pruebas borradas, con sus notas y su pizarra.' };
+  } catch {
+    return { ok: false, error: 'No pudimos borrarlas.' };
   }
 }

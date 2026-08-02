@@ -1,12 +1,17 @@
-import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { getAdminContext } from '@/lib/admin/access';
-import { listProfessionals } from '@/lib/db/repositories/consultorio';
-import { listInvitations } from '@/lib/db/repositories/memberships';
-import { VerificationBoard } from './verification-board';
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getAdminContext } from "@/lib/admin/access";
+import { listProfessionals } from "@/lib/db/repositories/consultorio";
+import { listInvitations } from "@/lib/db/repositories/memberships";
+import {
+  consultorioReadiness,
+  listTestAppointments,
+} from "@/lib/db/repositories/practice";
+import { VerificationBoard } from "./verification-board";
+import { TestDrive } from "./test-drive";
 
-export const metadata: Metadata = { title: 'Profesionales' };
-export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: "Profesionales" };
+export const dynamic = "force-dynamic";
 
 /**
  * El alta de un profesional, entera y en una sola pantalla.
@@ -30,38 +35,54 @@ export default async function AdminProfesionalesPage() {
   const admin = await getAdminContext();
   if (!admin) notFound();
 
-  const [roster, invitations] = await Promise.all([
+  const [roster, invitations, readiness, tests] = await Promise.all([
     // `false` = también los pendientes; son justo los que hay que revisar.
     listProfessionals(admin.ctx, false),
     listInvitations(admin.ctx),
+    consultorioReadiness(admin.ctx),
+    listTestAppointments(admin.ctx),
   ]);
 
   return (
-    <VerificationBoard
-      roster={roster.map((entry) => ({
-        id: entry.id,
-        name: entry.name ?? entry.email ?? 'Sin nombre',
-        specialties: entry.specialties,
-        licenseNumber: entry.licenseNumber,
-        licenseDocs: entry.licenseDocs.map((doc) => ({
-          filename: doc.filename,
-          blobUrl: doc.blobUrl,
-        })),
-        verificationStatus: entry.verificationStatus,
-        termsAcceptedAt: entry.termsAcceptedAt?.toISOString() ?? null,
-        isMe: entry.userId === admin.ctx.userId,
-      }))}
-      /*
-       * Solo las invitaciones de profesionales. Las demás se administran en
-       * Miembros: enseñarlas aquí convertiría esta pantalla en la otra.
-       */
-      invitations={invitations
-        .filter((invitation) => invitation.role === 'professional')
-        .map((invitation) => ({
-          id: invitation.id,
-          email: invitation.email,
-          expiresAt: invitation.expiresAt.toISOString(),
+    <div style={{ display: "grid", gap: "var(--cian-section-gap)" }}>
+      <VerificationBoard
+        roster={roster.map((entry) => ({
+          id: entry.id,
+          name: entry.name ?? entry.email ?? "Sin nombre",
+          specialties: entry.specialties,
+          licenseNumber: entry.licenseNumber,
+          licenseDocs: entry.licenseDocs.map((doc) => ({
+            filename: doc.filename,
+            blobUrl: doc.blobUrl,
+          })),
+          verificationStatus: entry.verificationStatus,
+          termsAcceptedAt: entry.termsAcceptedAt?.toISOString() ?? null,
+          isMe: entry.userId === admin.ctx.userId,
         }))}
-    />
+        /*
+         * Solo las invitaciones de profesionales. Las demás se administran en
+         * Miembros: enseñarlas aquí convertiría esta pantalla en la otra.
+         */
+        invitations={invitations
+          .filter((invitation) => invitation.role === "professional")
+          .map((invitation) => ({
+            id: invitation.id,
+            email: invitation.email,
+            expiresAt: invitation.expiresAt.toISOString(),
+          }))}
+      />
+
+      {/*
+       * Al final: poner en marcha el consultorio es lo que se hace después de
+       * dar de alta a alguien, no antes.
+       */}
+      <TestDrive
+        readiness={readiness}
+        tests={tests.map((test) => ({
+          id: test.id,
+          scheduledAt: test.scheduledAt.toISOString(),
+        }))}
+      />
+    </div>
   );
 }

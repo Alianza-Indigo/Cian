@@ -253,6 +253,10 @@ import {
   clientDossier,
   myAgenda,
   myClients,
+  consultorioReadiness,
+  createTestAppointment,
+  deleteTestAppointments,
+  listTestAppointments,
   proposalsForMe,
   proposeAppointment,
 } from '../lib/db/repositories/practice';
@@ -871,6 +875,22 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     ['myClients', (ctx) => myClients(ctx as TenantContext)],
     ['clientDossier', (ctx) => clientDossier(ctx as TenantContext, 'usuario-2')],
     ['proposalsForMe', (ctx) => proposalsForMe(ctx as TenantContext)],
+    [
+      'consultorioReadiness',
+      (ctx) => consultorioReadiness(ctx as TenantContext),
+    ],
+    [
+      'createTestAppointment',
+      (ctx) => createTestAppointment(ctx as TenantContext),
+    ],
+    [
+      'listTestAppointments',
+      (ctx) => listTestAppointments(ctx as TenantContext),
+    ],
+    [
+      'deleteTestAppointments',
+      (ctx) => deleteTestAppointments(ctx as TenantContext),
+    ],
     [
       'proposeAppointment',
       (ctx) =>
