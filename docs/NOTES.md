@@ -5,6 +5,107 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 7 — Crisis no emergentes
+
+### La escalera de derivación corre antes del modelo, no dentro de él
+
+`lib/crisis/escalation.ts` es una comprobación determinista sobre el mensaje
+de la persona, y vive en `app/api/chat/route.ts` **antes** de la llamada al
+modelo. Si se dispara, CIAN devuelve un texto fijo por el mismo canal de
+streaming que una respuesta normal (`createUIMessageStream`) y el modelo no
+llega a ejecutarse.
+
+Va incluso antes del límite de uso, a propósito: quien está viviendo una
+emergencia no puede toparse con «alcanzaste tu límite de mensajes». Una
+derivación no consume cuota porque no consume tokens.
+
+### Precisión y sensibilidad valen lo mismo aquí
+
+La tentación es hacer el detector agresivo. El PRD lo prohíbe explícitamente al
+pedir que **no** se dispare con «estoy agotada», y la razón es de producto, no
+de ingeniería: si una madre exhausta recibe un aviso de emergencia en vez del
+acompañamiento que venía a buscar, se queda sin ayuda y aprende que decir la
+verdad sobre su cansancio tiene consecuencias.
+
+De ahí el `IDIOM_TAIL` —«me quiero morir **de vergüenza**»— y la lista
+`KNOWN_FALSE_POSITIVES`, que la prueba recorre entera. Por el mismo motivo
+«me corto» a secas quedó fuera de la regla de autolesión: cortarse el dedo
+picando cebolla produce la misma cadena.
+
+Los números están verificados en fuentes oficiales el 2026-08-02: **911**
+(emergencias nacionales) y **800 911 2000** (Línea de la Vida, CONASAMA,
+gratuita, 24/7). Si cambian, se cambian en `escalation.ts`.
+
+### El barandal médico cubre lo que se guarda, no lo que se dice
+
+`lib/crisis/medical-guardrail.ts` comprueba todo el texto que el modelo entrega
+a través de las tools de crisis: los pasos del acompañamiento, el registro del
+episodio, los protocolos y el plan posterior. Ahí falla la tool y el modelo
+reescribe.
+
+**Lo que no cubre:** la prosa libre del mensaje en streaming. Comprobarla
+exigiría bufferizar la respuesta completa antes de mostrarla, y eso convierte
+una respuesta que empieza en dos segundos en una que aparece de golpe al
+final —justo en el módulo donde la espera se vive peor—. Hoy esa parte la
+sostienen el prompt (`crisis.system`) y el hecho de que la guía accionable
+—los pasos— sí pasa por el barandal por diseño: `activateCrisisSupport` los
+exige como datos, no como texto.
+
+Queda anotado como la deuda más relevante de esta fase. Una salida razonable
+para más adelante: comprobar el texto por fragmentos completos a medida que
+llegan y cortar el stream ante una violación, en vez de esperar al final.
+
+### Lo que las pruebas garantizan y lo que no
+
+Las 92 pruebas de `tests/crisis.test.ts` verifican los barandales, no la
+conducta del modelo: los 18 casos adversariales documentan una salida que el
+modelo podría producir y comprueban que no pasa. El criterio del PRD pide 15.
+
+Sin acceso de red al modelo desde este entorno, sigue **sin verificar en vivo**
+que Gemini 3.1 Flash Lite enrute correctamente a `getCrisisStrategies` y
+`activateCrisisSupport` con 41 tools registradas. Es el mismo pendiente que
+arrastran las fases anteriores y el punto que más conviene medir en la
+plataforma: si Flash-Lite no sostiene el enrutado en crisis, la salida no es
+relajar el barandal sino usar un modelo más capaz solo para este agente
+(`model_configs` de la Fase 9 ya lo admite).
+
+### Los patrones se calculan en el navegador
+
+`lib/crisis/patterns.ts` es una función pura y `crisis-log.tsx` la ejecuta en
+el cliente. No es una preferencia de arquitectura: las franjas horarias y los
+días de la semana dependen de la zona horaria de quien mira, y el servidor vive
+en UTC. Decirle a una familia de Ciudad de México que sus crisis pasan «de
+madrugada» cuando pasan por la tarde no es ruido, es un dato falso.
+
+Por eso `getCrisisHistory` —que corre en el servidor— devuelve los conteos que
+no dependen de la hora y omite las franjas horarias a propósito.
+
+Con menos de cuatro episodios no se muestran patrones. Con tres, cualquier
+coincidencia parece una regla.
+
+### Qué se guarda de una derivación
+
+`crisis_events` anota la **categoría** de la señal (`escalation_signals`) y
+nunca el mensaje. Poder responder «¿esto ya había pasado?» no justifica
+conservar el peor momento de alguien escrito en una tabla.
+
+### Pendientes de esta fase
+
+- **El modo crisis no se puede activar desde la interfaz.** Solo lo enciende el
+  modelo al llamar a `activateCrisisSupport`. Un botón «necesito ayuda ahora»
+  en `/crisis` que abra una conversación ya en modo crisis sería útil y no
+  estaba en el alcance.
+- **El registro del episodio se hace conversando**, no con un formulario. Para
+  quien prefiera escribirlo directamente falta una pantalla de alta manual en
+  `/crisis`.
+- **Sin revisión con lector de pantalla del modo simplificado.** La estructura
+  (`section` con `aria-label`, `role="log"` en la respuesta, objetivos táctiles
+  de 3.25 rem) está puesta, pero no se ha escuchado.
+- **El umbral de cuatro episodios es un juicio, no un cálculo.** Conviene
+  revisarlo con datos reales.
+
+---
+
 ## Fase 6 — Educación y biblioteca inteligente
 
 ### Los 1536 del PRD se conservaron

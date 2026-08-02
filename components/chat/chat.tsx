@@ -6,6 +6,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { MessageList } from './message-list';
 import { Composer } from './composer';
+import { CrisisMode, crisisStateOf } from './crisis-mode';
 import type { UploadedAttachment } from '@/lib/attachments/client';
 
 type ChatProps = {
@@ -33,6 +34,7 @@ export function Chat({
 }: ChatProps) {
   const router = useRouter();
   const [editingText, setEditingText] = useState<string | null>(null);
+  const [dismissedCrisisKey, setDismissedCrisisKey] = useState<string | null>(null);
   const urlSynced = useRef(!isNew);
   const historyRefreshed = useRef(!isNew);
 
@@ -127,6 +129,20 @@ export function Chat({
     [messages, busy, clearError, setMessages, sendMessage],
   );
 
+  /*
+   * Modo crisis. Se enciende solo cuando el modelo llamó a
+   * `activateCrisisSupport`, nunca por palabras clave del lado del cliente:
+   * simplificar la interfaz de golpe porque alguien escribió «crisis» sería
+   * quitarle la conversación a quien no la estaba teniendo.
+   *
+   * Salir es decisión de la persona y se recuerda hasta que haya una
+   * activación nueva. Una interfaz que insiste en simplificarse después de que
+   * le dijeron que no es una interfaz que no escucha.
+   */
+  const crisis = crisisStateOf(messages);
+  const crisisKey = crisis ? messages[crisis.messageIndex]?.id ?? null : null;
+  const showCrisisMode = crisis !== null && dismissedCrisisKey !== crisisKey;
+
   const lastUserMessage = [...messages]
     .reverse()
     .find((message) => message.role === 'user');
@@ -155,6 +171,27 @@ export function Chat({
     (text: string) => handleEditSubmit(text),
     [handleEditSubmit],
   );
+
+  if (showCrisisMode && crisis) {
+    // Solo se muestra texto posterior a la activación: repetir en prosa los
+    // pasos que ya están en pantalla es justo el ruido que sobra aquí.
+    const later = messages
+      .slice(crisis.messageIndex + 1)
+      .filter((message) => message.role === 'assistant');
+    const latest = later[later.length - 1];
+
+    return (
+      <div className="flex min-h-[calc(100dvh-12rem)] flex-col">
+        <CrisisMode
+          state={crisis}
+          latestText={latest ? textOf(latest) || null : null}
+          busy={busy}
+          onQuickReply={(text) => submit(text, [])}
+          onExit={() => setDismissedCrisisKey(crisisKey)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] flex-col">

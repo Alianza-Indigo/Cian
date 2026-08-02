@@ -11,6 +11,8 @@
  */
 import {
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -28,6 +30,7 @@ import { logRawProviderError, toUserFacingError } from '@/lib/ai/errors';
 import {
   ensureConversation,
   countMessages,
+  setAutoTitle,
   touchConversation,
 } from '@/lib/db/repositories/conversations';
 import { appendMessage, deleteFromMessage } from '@/lib/db/repositories/messages';
@@ -37,6 +40,12 @@ import {
   resolveAttachments,
 } from '@/lib/attachments/resolve';
 import { recordUsage } from '@/lib/db/repositories/usage';
+import { recordEscalation } from '@/lib/db/repositories/crisis';
+import {
+  detectEmergencySignals,
+  escalationResponse,
+  signalSummary,
+} from '@/lib/crisis/escalation';
 import type { MessagePart } from '@/lib/db/schema/chat';
 
 export const runtime = 'nodejs';
@@ -86,12 +95,30 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse('No entendimos la solicitud.', 400);
   }
 
+  const incoming = payload.messages[payload.messages.length - 1];
+  if (!incoming || incoming.role !== 'user') {
+    return errorResponse('El último mensaje debe ser tuyo.', 400);
+  }
+
+  /*
+   * Escalera de derivación. Regla 3.6 del PRD.
+   *
+   * Va aquí arriba, antes del límite de uso y antes del modelo, por dos
+   * razones. Una: un barandal que dependiera de que el modelo se porte bien no
+   * sería un barandal. Dos: quien está viviendo una emergencia no puede
+   * toparse con «alcanzaste tu límite de mensajes». Una derivación no gasta
+   * cuota porque no gasta tokens.
+   */
+  const emergencySignals = detectEmergencySignals(textOf(incoming));
+
   // El límite se comprueba antes de gastar un solo token.
-  const limit = await checkChatRateLimit(ctx.tenantId, ctx.userId);
-  if (!limit.allowed) {
-    return errorResponse(limit.message, 429, {
-      'Retry-After': String(limit.retryAfterSeconds),
-    });
+  if (emergencySignals.length === 0) {
+    const limit = await checkChatRateLimit(ctx.tenantId, ctx.userId);
+    if (!limit.allowed) {
+      return errorResponse(limit.message, 429, {
+        'Retry-After': String(limit.retryAfterSeconds),
+      });
+    }
   }
 
   const conversation = await ensureConversation(ctx, payload.id);
@@ -101,11 +128,6 @@ export async function POST(request: Request): Promise<Response> {
   // anterior en vez de acumular intentos que después confunden al modelo.
   if (payload.regenerateFromMessageId) {
     await deleteFromMessage(ctx, conversationId, payload.regenerateFromMessageId);
-  }
-
-  const incoming = payload.messages[payload.messages.length - 1];
-  if (!incoming || incoming.role !== 'user') {
-    return errorResponse('El último mensaje debe ser tuyo.', 400);
   }
 
   const previousCount = await countMessages(ctx, conversationId);
@@ -122,6 +144,56 @@ export async function POST(request: Request): Promise<Response> {
   const attachmentIds = collectAttachmentIds([incoming]);
   if (attachmentIds.length > 0) {
     await attachToMessage(ctx, userMessage.id, attachmentIds);
+  }
+
+  /*
+   * El flujo se detiene aquí. No se llama al modelo, no se ofrecen
+   * alternativas y no se continúa el acompañamiento: el PRD lo pide con esas
+   * palabras. Se devuelve un texto fijo, escrito por personas y revisado, que
+   * viaja por el mismo canal que una respuesta normal para que el cliente no
+   * tenga que distinguir un caso del otro.
+   */
+  if (emergencySignals.length > 0) {
+    const answer = escalationResponse(emergencySignals);
+
+    // Del episodio se guarda la categoría de la señal, nunca el mensaje.
+    await recordEscalation(ctx, {
+      conversationId,
+      categories: signalSummary(emergencySignals),
+    }).catch(() => {
+      // Registrar no puede impedir que la persona vea a dónde llamar.
+    });
+
+    const stream = createUIMessageStream({
+      originalMessages: payload.messages,
+      execute({ writer }) {
+        writer.write({ type: 'start' });
+        writer.write({ type: 'text-start', id: 'derivacion' });
+        writer.write({ type: 'text-delta', id: 'derivacion', delta: answer });
+        writer.write({ type: 'text-end', id: 'derivacion' });
+        writer.write({ type: 'finish' });
+      },
+      async onFinish({ responseMessage }) {
+        try {
+          await Promise.all([
+            appendMessage(ctx, {
+              id: responseMessage.id,
+              conversationId,
+              role: 'assistant',
+              parts: responseMessage.parts as MessagePart[],
+            }),
+            touchConversation(ctx, conversationId),
+            // Título fijo: titular esta conversación costaría una llamada al
+            // modelo y le pondría nombre al peor momento de alguien.
+            setAutoTitle(ctx, conversationId, 'Derivación a emergencias'),
+          ]);
+        } catch {
+          // Igual que arriba: la persistencia no interrumpe la derivación.
+        }
+      },
+    });
+
+    return createUIMessageStreamResponse({ stream });
   }
 
   const systemPrompt = await getPromptOrFallback(

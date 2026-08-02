@@ -5,6 +5,46 @@ fases posteriores o cuando alguien podría revertirla sin saber por qué se tom�
 
 ---
 
+## 2026-08-02 — Fase 7
+
+### La escalera de derivación no es una tool
+
+Podría haberse implementado como una tool que el modelo llama al detectar
+riesgo. Se decidió que no: un barandal que depende de que el modelo lo invoque
+no es un barandal, es una sugerencia. La detección es determinista, corre en la
+ruta antes de `streamText` y, cuando se dispara, el modelo no se ejecuta.
+
+Consecuencia que conviene tener presente: la escalera solo ve el **último**
+mensaje de la persona. Es lo correcto para el caso que atiende —una emergencia
+se declara en el mensaje que se acaba de escribir— pero significa que no
+detecta una señal repartida entre varios turnos.
+
+### Respuesta fija, escrita por personas
+
+`escalationResponse()` devuelve texto fijo, no generado. El PRD pide que el
+flujo se detenga y que no se ofrezcan alternativas; dejar que el modelo redacte
+esa respuesta abriría la puerta a que la suavice, la alargue o invite a seguir
+conversando. La prueba comprueba que no aparecen invitaciones a continuar.
+
+### El barandal médico se aplica en las tools, no en el stream
+
+Ver NOTES.md para el detalle y la deuda que deja. La decisión de fondo: se
+prefirió que la **guía accionable** exista como datos estructurados
+—`activateCrisisSupport` exige los pasos en el esquema— en vez de intentar
+validar prosa. Eso hace que lo que la persona va a seguir paso a paso esté
+comprobado, y de paso permite que la interfaz lo muestre en grande.
+
+### `crisis_events` extiende el esquema del PRD
+
+Se agregaron tres columnas al esquema que el PRD enumera:
+
+- `summary` — «qué pasó» del punto 5 del alcance, que no tenía columna.
+- `escalation_signals` — categorías de la señal, para no guardar el mensaje.
+- `post_plan_id` — el enlace real al plan posterior del punto 6, que de otro
+  modo solo existiría como mención en una conversación.
+
+---
+
 ## 2026-08-01 — Fase 0
 
 ### Región única: `iad1`

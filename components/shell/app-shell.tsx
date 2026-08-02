@@ -9,6 +9,7 @@ import {
   CheckSquare,
   GraduationCap,
   FileText,
+  LifeBuoy,
   ListChecks,
   Menu,
   Plus,
@@ -34,6 +35,7 @@ export type NavItem = {
     | 'planes'
     | 'rutinas'
     | 'sensorialidad'
+    | 'crisis'
     | 'tareas'
     | 'alimentacion'
     | 'educacion'
@@ -47,6 +49,7 @@ const ICONS = {
   planes: Target,
   rutinas: ListChecks,
   sensorialidad: Sparkles,
+  crisis: LifeBuoy,
   tareas: CheckSquare,
   alimentacion: UtensilsCrossed,
   educacion: GraduationCap,
