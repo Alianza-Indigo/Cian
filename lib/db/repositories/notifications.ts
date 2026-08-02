@@ -1,4 +1,5 @@
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, gte, lte } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../client';
 import {
   notificationLog,
@@ -8,6 +9,7 @@ import {
   type PushSubscriptionRow,
   type ReminderRow,
 } from '../schema/notifications';
+import { appointments, professionals } from '../schema/consultorio';
 import { userPreferences } from '../schema/preferences';
 import { users } from '../schema/auth';
 import { assertTenantContext, type TenantContext } from '../../tenant/guard';
@@ -20,6 +22,20 @@ import {
   type ReminderSchedule,
 } from '../../notifications/types';
 import type { PushSubscriptionKeys } from '../../notifications/webpush';
+
+/** Lo que el barrido necesita saber de una cita para decidir si avisa. */
+export type AppointmentNoticeCandidate = {
+  appointmentId: string;
+  tenantId: string;
+  scheduledAt: Date;
+  status: string;
+  noticeSentAt: Date | null;
+  clientUserId: string;
+  clientEmail: string | null;
+  professionalUserId: string;
+  professionalName: string | null;
+  preferences: NotificationPreferences;
+};
 
 // --- Suscripciones de push ---------------------------------------------------
 
@@ -240,6 +256,75 @@ export async function listActiveRemindersForSweep(): Promise<SweepCandidate[]> {
     preferences: row.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
     email: row.email,
   }));
+}
+
+/**
+ * Citas que podrían necesitar aviso hoy.
+ *
+ * Sin `TenantContext`, como `listActiveRemindersForSweep` y por lo mismo: la
+ * llama el cron, que no actúa en nombre de nadie. Devuelve lo mínimo para
+ * decidir y redactar el aviso —cuándo, con quién y a qué zona horaria—, nunca
+ * el motivo de la consulta, que no tiene por qué salir de la pantalla de la
+ * cita ni aparecer en una notificación.
+ *
+ * La ventana es de dos días para cubrir la víspera y el mismo día en cualquier
+ * huso; quién avisa de verdad lo decide `appointmentNotice`.
+ */
+export async function listAppointmentsForNotice(
+  now: Date,
+): Promise<AppointmentNoticeCandidate[]> {
+  const hasta = new Date(now.getTime() + 2 * 86_400_000);
+
+  const cliente = alias(users, 'cliente');
+  const profesionalUser = alias(users, 'profesional_user');
+
+  const rows = await db
+    .select({
+      appointmentId: appointments.id,
+      tenantId: appointments.tenantId,
+      scheduledAt: appointments.scheduledAt,
+      status: appointments.status,
+      noticeSentAt: appointments.noticeSentAt,
+      clientUserId: appointments.clientUserId,
+      clientEmail: cliente.email,
+      clientPreferences: userPreferences.notifications,
+      professionalUserId: professionals.userId,
+      professionalName: profesionalUser.name,
+    })
+    .from(appointments)
+    .innerJoin(professionals, eq(professionals.id, appointments.professionalId))
+    .leftJoin(cliente, eq(cliente.id, appointments.clientUserId))
+    .leftJoin(profesionalUser, eq(profesionalUser.id, professionals.userId))
+    .leftJoin(
+      userPreferences,
+      and(
+        eq(userPreferences.userId, appointments.clientUserId),
+        eq(userPreferences.tenantId, appointments.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(appointments.status, 'confirmada'),
+        gte(appointments.scheduledAt, now),
+        lte(appointments.scheduledAt, hasta),
+      ),
+    );
+
+  return rows.map((row) => ({
+    ...row,
+    preferences: row.clientPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+  }));
+}
+
+/** Deja constancia de que ya se avisó, para no repetir hoy. */
+export async function markAppointmentNoticed(
+  appointmentId: string,
+  when: Date,
+): Promise<void> {
+  await db
+    .update(appointments)
+    .set({ noticeSentAt: when })
+    .where(eq(appointments.id, appointmentId));
 }
 
 export async function subscriptionsForUser(

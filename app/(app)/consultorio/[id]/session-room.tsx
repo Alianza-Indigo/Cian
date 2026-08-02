@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Circle, Eraser, Lock, Send, Trash2, Video, VideoOff } from 'lucide-react';
+import {
+  Circle,
+  Eraser,
+  Lock,
+  Send,
+  Sparkles,
+  Trash2,
+  Video,
+  VideoOff,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleField } from '@/components/ui/toggle-field';
@@ -20,6 +29,7 @@ import {
   addSessionNoteAction,
   assignSessionTaskAction,
   deleteSessionNoteAction,
+  draftSessionSummaryAction,
   endSessionAction,
   publishSessionSummaryAction,
   saveSessionSummaryAction,
@@ -494,6 +504,12 @@ export function SessionRoom(props: Props) {
             retira la aprobación anterior: una aprobación es para un texto
             concreto, no para el hueco donde va.
           </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Si pides el borrador a CIAN, lo redacta <strong>solo</strong> con
+            las notas compartidas y los acuerdos. Tus notas privadas no entran,
+            ni siquiera como contexto: resumir un texto deja rastro de él, y
+            esto lo va a leer la persona que atendiste.
+          </p>
 
           <Card className="mt-3">
             <textarea
@@ -505,6 +521,31 @@ export function SessionRoom(props: Props) {
             />
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
+              {/*
+                * El borrador con IA va el primero pero como acción secundaria:
+                * escribirlo a mano sigue siendo el camino normal, y quien
+                * prefiera hacerlo no tiene por qué pasar por aquí.
+                */}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isPending}
+                onClick={() =>
+                  run(async () => {
+                    const result = await draftSessionSummaryAction(
+                      props.sessionId,
+                    );
+                    if (result.ok && result.content) {
+                      setSummaryText(result.content);
+                    }
+                    return result;
+                  })
+                }
+              >
+                <Sparkles aria-hidden="true" />
+                Redactar borrador
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"

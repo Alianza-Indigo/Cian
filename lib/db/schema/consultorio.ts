@@ -164,12 +164,26 @@ export const appointments = pgTable(
     meetingUrl: text('meeting_url'),
     meetingProvider: text('meeting_provider').notNull().default('meet'),
     reason: text('reason'),
+    /**
+     * Cuándo se avisó por última vez de esta cita.
+     *
+     * Una sola columna para los dos avisos —la víspera y la mañana— porque el
+     * barrido es diario: comparar el día local de esta fecha con el de hoy basta
+     * para no repetir, y dos columnas serían dos cosas que mantener
+     * sincronizadas para responder la misma pregunta.
+     */
+    noticeSentAt: timestamp('notice_sent_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
   },
   (table) => [
     index('appointments_tenant_id_idx').on(table.tenantId),
+    // El barrido diario lee por aquí, cruzando tenants.
+    index('appointments_notice_idx').on(table.status, table.scheduledAt),
     index('appointments_professional_time_idx').on(
       table.professionalId,
       table.scheduledAt,

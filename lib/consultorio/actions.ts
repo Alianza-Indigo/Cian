@@ -22,6 +22,7 @@ import {
   upsertProfessionalProfile,
 } from '../db/repositories/consultorio';
 import { recordAudit } from '../db/repositories/audit';
+import { generateSessionSummaryDraft } from './summary-draft';
 import {
   APPOINTMENT_STATUSES,
   NOTE_VISIBILITIES,
@@ -336,6 +337,50 @@ export async function deleteSessionNoteAction(
 }
 
 // --- Resumen -----------------------------------------------------------------
+
+/**
+ * Pide al modelo un borrador del resumen.
+ *
+ * **Solo lo alimentan las notas compartidas.** Las privadas del profesional no
+ * entran ni como contexto: resumir un texto deja rastro de él, y este resumen
+ * lo va a leer la persona atendida. El filtro está en `selectSummarySources`,
+ * en código, no en el prompt.
+ *
+ * Lo que guarda queda **sin publicar**, como cualquier otro guardado. El
+ * criterio del PRD —«el resumen no se publica sin aprobación del
+ * profesional»— vale igual para un borrador escrito por un modelo, y más.
+ */
+export async function draftSessionSummaryAction(
+  sessionId: string,
+): Promise<ConsultorioActionResult & { content?: string }> {
+  if (!idSchema.safeParse(sessionId).success) {
+    return { ok: false, error: 'Sesión no válida.' };
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    const result = await generateSessionSummaryDraft(ctx, sessionId);
+
+    if (!result.ok) return { ok: false, error: result.reason };
+
+    await recordAudit(ctx, {
+      action: 'consultorio.summary_draft',
+      entity: 'session_summary',
+      entityId: sessionId,
+    });
+
+    revalidatePath(`/consultorio/${sessionId}`);
+    return {
+      ok: true,
+      message:
+        'Borrador generado con las notas compartidas. Revísalo antes de ' +
+        'publicarlo: sigue sin publicar.',
+      content: result.content,
+    };
+  } catch (error) {
+    return fail(error, 'No pudimos generar el borrador.');
+  }
+}
 
 export async function saveSessionSummaryAction(
   sessionId: string,
