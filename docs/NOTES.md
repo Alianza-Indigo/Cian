@@ -303,31 +303,103 @@ la verificación existe para tapar.
   tanto no puede garantizarlos ni medirlos.
 - **La grabación con consentimiento ya no es una garantía técnica**, solo un
   acuerdo registrado. Ver arriba.
-- **Sin chat de sesión.** Iba por el canal de datos de la videollamada. El de
-  Meet sirve, y duplicarlo dentro de CIAN sería ruido; queda como decisión
-  abierta si se quiere uno que se conserve en el historial.
-- **La pizarra no se sincroniza sola.** Se guarda al soltar el trazo y la otra
-  parte la ve al recargar. Para tiempo real haría falta un canal en vivo, que
-  ahora mismo no existe en ninguna parte del sistema.
-- **El resumen no lo genera la IA todavía.** El campo, la aprobación y la
-  publicación están; falta la llamada al modelo que redacte el borrador a
-  partir de las notas compartidas. Es media hora de trabajo y depende de una
-  decisión que no tocaba tomar sola: qué notas alimentan el resumen. Las
-  privadas del profesional, por definición, no deberían.
-- **Sin recordatorios de cita.** El alcance los pide. La infraestructura existe
-  entera desde la Fase 8 (`reminders` + barrido diario); falta crear el
-  recordatorio al confirmar una cita. No se hizo porque el barrido es diario y
-  un aviso de cita que llega «en algún momento del día» no sirve: conviene
-  resolverlo junto con la frecuencia del cron.
-- **Sin compartir documentos, planes y rutinas dentro de la sesión.** El
-  alcance lo pide. La Fase 8 ya tiene el mecanismo (`resource_shares`); falta
-  el atajo desde la pantalla de sesión.
-- **Sin subida de documentos de cédula.** El esquema tiene `license_docs`;
-  falta la subida a Blob desde el formulario.
-- **La verificación es del tenant, no de la plataforma.** Un admin de espacio
-  verifica a los profesionales de su espacio. Para una verificación central de
-  CIAN haría falta que el superadmin de la Fase 9 vea otros tenants, y esa
-  puerta no se abrió a la ligera.
+- **Sin chat de sesión, y se decide dejarlo así.** Meet ya trae uno para lo que
+  pasa durante la llamada. Lo que hay que conservar de una consulta son las
+  notas —que existen, con visibilidad privada o compartida— y los acuerdos, que
+  son tareas con seguimiento. Un chat en medio sería un tercer sitio donde
+  escribir lo mismo, y el que peor se busca después.
+
+  Si algún día se quiere, lo que faltaría no es el chat sino decidir qué pasa
+  con lo escrito ahí cuando la sesión termina: si se conserva, es historial
+  clínico y necesita las mismas reglas que las notas; si no, no hacía falta
+  guardarlo.
+- ~~La pizarra no se sincroniza sola.~~ **Resuelto, y de paso se arregló un
+  fallo que el primero tapaba.** El cliente mandaba la pizarra **entera** en
+  cada trazo y el servidor la reemplazaba, así que con dos personas dibujando el
+  último en soltar el lápiz borraba lo del otro. No se notaba precisamente
+  porque no había sincronización: cada quien veía su versión hasta que alguien
+  recargaba y descubría que faltaba la mitad.
+
+  Ahora se manda la **operación** —este trazo, o borrar todo— y se aplica sobre
+  lo que hay, en una transacción. Los trazos ya traían identificador, así que
+  reenviar el mismo no duplica y dos personas conservan los dos trazos.
+
+  La sincronización es por sondeo cada 2,5 s contra una revisión entera, no por
+  un canal abierto. **Es una decisión, no una limitación temporal:** mantener un
+  canal vivo por sesión en este despliegue cuesta una función abierta por
+  consulta, y para dos personas dibujando el sondeo cuesta menos y no se cae. Si
+  algún día hay muchas sesiones concurrentes, conviene revisarlo.
+
+  Un entero y no `updated_at` para la revisión: dos trazos en el mismo
+  milisegundo darían la misma marca y uno se perdería para quien mira.
+- ~~El resumen no lo genera la IA todavía.~~ **Resuelto, con la decisión
+  tomada: solo lo alimentan las notas compartidas.** Las privadas no entran ni
+  como contexto, y el motivo es que resumir un texto deja rastro de él. Una nota
+  privada que dice «sospecho X, hay que descartarlo» convertida en «se
+  exploraron posibles causas de X» ya reveló lo que el profesional decidió no
+  compartir. El filtro está en `selectSummarySources`, en código: un filtro
+  escrito en el prompt depende de que el modelo obedezca.
+
+  Lo que impide que invente no es el prompt sino la aprobación, que ya existía.
+
+  **Aquí NO se aplica el barandal médico de la Fase 7, y conviene que conste.**
+  Ese barandal impide que CIAN diagnostique o hable de medicación porque CIAN no
+  es profesional de la salud. Aquí el material lo escribió alguien que sí lo es,
+  sobre su propia consulta, y va a revisarlo antes de publicarlo. Aplicarlo
+  bloquearía a un psiquiatra por escribir sobre medicación en sus notas, que es
+  su trabajo.
+- ~~Sin recordatorios de cita.~~ **Resuelto sin tocar la frecuencia del cron.**
+  El problema era real: «tu cita es en una hora» enviado a las 7 de la mañana
+  miente. Lo que un barrido diario sí da bien es una agenda, así que avisa la
+  víspera y la mañana del mismo día, con la hora al frente.
+
+  No es una fila de `reminders`: se lee la cita directamente, así que cancelarla
+  deja de avisar sola, sin tres sitios que mantener sincronizados. Solo avisan
+  las confirmadas, solo a la persona atendida —quien tiene diez consultas al día
+  tiene agenda; a quien tiene una al mes se le pasa— y como mucho una vez al
+  día.
+
+  La hora se calcula en la zona de quien recibe el aviso: la misma cita se
+  anuncia a las 16:00 en Tijuana y a las 18:00 en Cancún. Y el aviso **no lleva
+  el motivo de la consulta**; el tipo de entrada ni siquiera tiene campo para
+  él, y hay una prueba que lo fija.
+- ~~Sin compartir documentos, planes y rutinas dentro de la sesión.~~
+  **Resuelto con tabla propia, no reutilizando la Fase 8.** `resource_shares`
+  comparte con un contacto de fuera identificado por su correo; el profesional
+  de una consulta es un miembro del mismo espacio. Reutilizarla habría obligado
+  a meterlo también en el equipo de apoyo, que es darle un acceso permanente y
+  de otra naturaleza para resolver un problema de una hora.
+
+  `session_shares` tiene alcance de sesión y es siempre de lectura —sin columna
+  de permiso, porque no hay decisión que tomar—. Revocar no borra la fila: queda
+  `revoked_at`, porque un registro clínico que se puede borrar sin rastro no
+  sirve para responder qué se enseñó en una consulta.
+
+  **Encontrado al hacerlo, y es lo más serio:** `shareResource` de la Fase 8
+  comprobaba el tenant y no la propiedad del recurso. Mientras cada persona
+  estuvo sola en su espacio bastaba; desde que se puede invitar gente, cualquier
+  miembro podía compartir el plan de otro con un contacto suyo. Lo cierra
+  `ownsResource`, en su propio módulo porque lo usan las dos fases.
+- ~~Sin subida de documentos de cédula.~~ **Resuelto.** Van por
+  `/api/adjuntos`, en almacenamiento privado tras una ruta que comprueba el
+  tenant: un documento de identidad profesional no puede quedar en una URL
+  pública. Antes se pedía el número de cédula y no se podía adjuntar nada que lo
+  respaldara, con lo que verificar era creerle a un campo de texto.
+
+  Adjuntar **no** devuelve la verificación a pendiente —aportar evidencia de lo
+  ya declarado no cambia lo declarado, y penalizar a quien aporta pruebas sería
+  al revés—, pero retirar un documento sí lo hace si estaba verificado: quitar
+  la evidencia sobre la que alguien verificó la deja sin sostén.
+- **La verificación es del tenant, no de la plataforma.** Es el único pendiente
+  de esta fase que sigue abierto, y sigue abierto a propósito: para una
+  verificación central de CIAN haría falta que el superadmin lea y escriba en
+  espacios ajenos, y eso es abrir un camino que esquiva el ámbito de tenant en
+  una plataforma de salud. No es trabajo que falte, es una decisión de política
+  que no corresponde tomar desde el código.
+
+  Lo que hay hoy es coherente: quien administra un espacio verifica a los
+  profesionales de su espacio, con la cédula y sus documentos delante, y queda
+  constancia de quién verificó y cuándo.
 
 ---
 
