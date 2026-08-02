@@ -114,6 +114,38 @@ import {
   listAttachmentsForMessages,
   listOrphanAttachments,
 } from '../lib/db/repositories/attachments';
+import {
+  addSensoryTool,
+  deleteSensoryTool,
+  getSensoryProfile,
+  listSensoryEvents,
+  listSensoryProfiles,
+  listSensoryTools,
+  logSensoryEvent,
+  removeFromSensoryProfile,
+  setToolEffective,
+  updateSensoryProfile,
+} from '../lib/db/repositories/sensory';
+import {
+  completeTask,
+  createTask,
+  deleteTask,
+  getTask,
+  listTasks,
+  prioritizeTasks,
+  replaceSubtasks,
+  updateTask,
+} from '../lib/db/repositories/tasks';
+import {
+  getFoodProfile,
+  getPlanForWeek,
+  getShoppingListForPlan,
+  listMealPlans,
+  logAcceptedFood,
+  savePlanForWeek,
+  saveShoppingList,
+  updateFoodProfile,
+} from '../lib/db/repositories/nutrition';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -361,6 +393,80 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     [
       'listOrphanAttachments',
       (ctx) => listOrphanAttachments(ctx as TenantContext, new Date(0)),
+    ],
+
+    // --- Fase 5: sensorialidad, tareas y alimentación -----------------------
+    ['listSensoryProfiles', (ctx) => listSensoryProfiles(ctx as TenantContext)],
+    [
+      'getSensoryProfile',
+      (ctx) => getSensoryProfile(ctx as TenantContext, 'sonidos'),
+    ],
+    [
+      'updateSensoryProfile',
+      (ctx) =>
+        updateSensoryProfile(ctx as TenantContext, {
+          domain: 'sonidos',
+          triggers: ['ruido'],
+        }),
+    ],
+    [
+      'removeFromSensoryProfile',
+      (ctx) =>
+        removeFromSensoryProfile(ctx as TenantContext, 'sonidos', 'triggers', 'x'),
+    ],
+    [
+      'logSensoryEvent',
+      (ctx) => logSensoryEvent(ctx as TenantContext, { domain: 'sonidos' }),
+    ],
+    ['listSensoryEvents', (ctx) => listSensoryEvents(ctx as TenantContext)],
+    [
+      'addSensoryTool',
+      (ctx) => addSensoryTool(ctx as TenantContext, { name: 'audifonos' }),
+    ],
+    ['listSensoryTools', (ctx) => listSensoryTools(ctx as TenantContext)],
+    ['setToolEffective', (ctx) => setToolEffective(ctx as TenantContext, CONV, true)],
+    ['deleteSensoryTool', (ctx) => deleteSensoryTool(ctx as TenantContext, CONV)],
+
+    [
+      'createTask',
+      (ctx) => createTask(ctx as TenantContext, { title: 'Limpiar' }),
+    ],
+    ['getTask', (ctx) => getTask(ctx as TenantContext, CONV)],
+    ['listTasks', (ctx) => listTasks(ctx as TenantContext)],
+    [
+      'replaceSubtasks',
+      (ctx) => replaceSubtasks(ctx as TenantContext, CONV, [{ title: 'Paso' }]),
+    ],
+    ['updateTask', (ctx) => updateTask(ctx as TenantContext, CONV, { title: 'X' })],
+    ['completeTask', (ctx) => completeTask(ctx as TenantContext, CONV)],
+    ['deleteTask', (ctx) => deleteTask(ctx as TenantContext, CONV)],
+    ['prioritizeTasks', (ctx) => prioritizeTasks(ctx as TenantContext, [CONV])],
+
+    ['getFoodProfile', (ctx) => getFoodProfile(ctx as TenantContext)],
+    [
+      'updateFoodProfile',
+      (ctx) => updateFoodProfile(ctx as TenantContext, { accepted: ['manzana'] }),
+    ],
+    ['logAcceptedFood', (ctx) => logAcceptedFood(ctx as TenantContext, 'pera')],
+    [
+      'savePlanForWeek',
+      (ctx) =>
+        savePlanForWeek(ctx as TenantContext, '2026-08-03', {
+          lunes: { desayuno: 'fruta' },
+        }),
+    ],
+    [
+      'getPlanForWeek',
+      (ctx) => getPlanForWeek(ctx as TenantContext, '2026-08-03'),
+    ],
+    ['listMealPlans', (ctx) => listMealPlans(ctx as TenantContext)],
+    [
+      'saveShoppingList',
+      (ctx) => saveShoppingList(ctx as TenantContext, CONV, [{ name: 'avena' }]),
+    ],
+    [
+      'getShoppingListForPlan',
+      (ctx) => getShoppingListForPlan(ctx as TenantContext, CONV),
     ],
   ];
 

@@ -11,6 +11,9 @@ export const dynamic = 'force-dynamic';
 const NAV_ITEMS: readonly NavItem[] = [
   { href: '/planes', label: 'Planes', icon: 'planes' },
   { href: '/rutinas', label: 'Rutinas', icon: 'rutinas' },
+  { href: '/tareas', label: 'Tareas', icon: 'tareas' },
+  { href: '/sensorialidad', label: 'Sensorialidad', icon: 'sensorialidad' },
+  { href: '/alimentacion', label: 'Alimentación', icon: 'alimentacion' },
   { href: '/documentos', label: 'Documentos', icon: 'documentos' },
   { href: '/memorias', label: 'Lo que recuerdo', icon: 'memorias' },
   {

@@ -5,6 +5,87 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 5 — Sensorialidad, funciones ejecutivas y alimentación
+
+### El barandal de alimentación está en código, no en el prompt
+
+Es lo más importante de esta fase. La regla 3.6 dice que el módulo tiene
+prohibido emitir cantidades, calorías, metas de peso, planes numéricos y
+restricciones, y que eso **se implementa técnicamente, no solo se declara**.
+
+`lib/nutrition/guardrail.ts` comprueba todo el contenido que produce el modelo
+—menús, listas de compras, perfiles— antes de guardarlo. Si cruza la línea, la
+tool **falla** con un mensaje que le explica al modelo qué corregir, y el modelo
+reescribe. No se sanea en silencio: a un menú al que se le borran las cifras le
+queda un texto incoherente, y es mejor rehacerlo entero.
+
+El mismo barandal aplica a lo que escribe una persona en la pantalla, con un
+mensaje distinto: a ella se le explica qué hace CIAN y qué no, sin regañarla.
+
+**Los 15 intentos adversariales están en `tests/nutrition-guardrail.test.ts`**,
+cada uno con el prompt que lo provocaría y la salida que representaría. Se
+detienen los quince. Y hay diez casos de contenido legítimo que deben pasar,
+porque un barandal que bloquea lo que el módulo existe para ofrecer no sirve
+de nada.
+
+Alcance honesto de esa prueba: verifica la comprobación determinista, no el
+comportamiento del modelo. El modelo puede intentar lo que sea; lo que
+garantiza la prueba es que si lo intenta, no pasa.
+
+Dos hallazgos al construirlo, ambos errores propios corregidos:
+
+- **`\b` de JavaScript no entiende letras acentuadas.** «índice de masa
+  corporal» no se detectaba porque `\b` antes de «í» no marca frontera. Se
+  resolvió con miradas Unicode (`(?<!\p{L})`).
+- **Faltaban las formas acentuadas de las unidades.** «porción» y «ración» se
+  colaban donde «porciones» y «raciones» sí se detenían.
+
+### Interpretación que conviene revisar
+
+**La lista de compras va sin cantidades.** El PRD prohíbe «cantidades» sin
+matizar, y una lista con «2 kg de manzanas» las lleva. Se optó por la lectura
+estricta: solo nombres, con una nota en la pantalla que explica por qué. Si te
+parece excesivo, relajarlo es cambiar una regla del barandal.
+
+### El registro de tools ya va en 33
+
+Se duplicó respecto de la fase anterior. Es mucho para Flash-Lite y ahora hay
+tools que compiten de verdad: ante «organiza la semana» pueden dispararse
+`planMeals`, `createRoutine` o `createPlan`. **Este es el momento de medirlo en
+serio.** Si falla, `model_configs` de la Fase 9 permite modelo por propósito.
+
+### Decisiones que conviene no revertir sin leer esto
+
+- **Las subtareas se acotan a seis.** El criterio pide que ante «no puedo
+  empezar a limpiar» se devuelva un primer paso mínimo, no una lista de diez.
+  Una lista larga ante la parálisis es más parálisis. La tool además pide el
+  primer paso **aparte** de los demás, para que el modelo tenga que pensarlo.
+
+- **Los perfiles sensoriales acumulan, no reemplazan.** Lo que ya se sabía que
+  funciona no se pierde porque una conversación posterior mencione solo una
+  parte.
+
+- **`suggestRegulationStrategy` devuelve primero lo que YA le funcionó** a esa
+  persona, y también lo que no. Proponer de cero algo que ya se probó y falló
+  es la forma más rápida de perder la confianza de quien está agotado.
+
+- **El perfil de alimentación no dice «permitido» ni «prohibido».** Dice «lo
+  que come sin problema» y «lo que le cuesta». El vocabulario es parte del
+  barandal.
+
+### Deuda técnica
+
+- **Las tareas no tienen fecha límite en la interfaz.** La columna `due_at`
+  existe y la tool puede llenarla, pero no hay selector de fecha.
+
+- **`prioritizeTasks` no tiene interfaz propia.** Solo se puede reordenar desde
+  la conversación.
+
+- **La bitácora sensorial no tiene vista de patrones.** Es una lista de
+  momentos. Los datos están en `sensory_events` para cuando haga falta.
+
+---
+
 ## Fase 4 — Adjuntos y voz
 
 ### La decisión que define esta fase

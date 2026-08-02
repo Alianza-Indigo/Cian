@@ -10,3 +10,4 @@ export * from './documents';
 export * from './plans';
 export * from './routines';
 export * from './attachments';
+export * from './daily-life';

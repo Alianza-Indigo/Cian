@@ -15,6 +15,9 @@ import { buildUserContextTools } from './user-context';
 import { buildDocumentTools } from './documents';
 import { buildPlanTools } from './plans';
 import { buildRoutineTools } from './routines';
+import { buildSensoryTools } from './sensory';
+import { buildTaskTools } from './tasks';
+import { buildNutritionTools } from './nutrition';
 
 export type ToolRegistry = Record<string, Tool>;
 
@@ -33,5 +36,8 @@ export function buildTools(toolContext: ToolContext): ToolRegistry {
     ...buildDocumentTools(toolContext),
     ...buildPlanTools(toolContext),
     ...buildRoutineTools(toolContext),
+    ...buildSensoryTools(toolContext),
+    ...buildTaskTools(toolContext),
+    ...buildNutritionTools(toolContext),
   };
 }

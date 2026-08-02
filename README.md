@@ -11,11 +11,12 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 4 — Adjuntos y voz.** Entrada y salida multimodal: se pueden adjuntar
-documentos, imágenes y audio a la conversación, dictar por voz y escuchar las
-respuestas. Se suma a la conversación de la Fase 1, los documentos de la Fase 2
-y los planes y rutinas de la Fase 3. Sin recordatorios ni videollamada: eso
-llega en las fases siguientes.
+**Fase 5 — Vida diaria.** Sensorialidad, funciones ejecutivas y alimentación,
+los tres módulos que comparten patrón: perfil, registro y estrategias. El de
+alimentación tiene un barandal en código que le impide emitir cantidades,
+calorías, metas de peso y restricciones (regla 3.6), verificado con 15 intentos
+adversariales. Se suma a todo lo anterior. Sin crisis, sin biblioteca y sin
+recordatorios: eso llega en las fases siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -63,6 +64,9 @@ app/
     chat/[id]/                 una conversación
     planes/[id]/               plan con objetivos y seguimiento
     rutinas/[id]/secuencia/    la rutina paso a paso
+    sensorialidad/             perfil por sentido y herramientas
+    tareas/                    tareas con sus pasos
+    alimentacion/              perfil, menú semanal y compras
     documentos/                biblioteca de documentos
     memorias/                  lo que CIAN recuerda de ti
     configuracion/accesibilidad/
@@ -82,6 +86,8 @@ lib/
   documents/                   generadores de PDF, DOCX y texto
   plans/                       planes, rutinas y su exportación
   attachments/                 validación, extracción y resolución
+  sensory/                     sensorialidad y funciones ejecutivas
+  nutrition/                   alimentación y su barandal (regla 3.6)
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación

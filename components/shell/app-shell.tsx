@@ -3,7 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Brain, FileText, ListChecks, Menu, Plus, Settings, Target, X } from 'lucide-react';
+import {
+  Brain,
+  CheckSquare,
+  FileText,
+  ListChecks,
+  Menu,
+  Plus,
+  Settings,
+  Sparkles,
+  Target,
+  UtensilsCrossed,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
@@ -16,12 +28,23 @@ import {
 export type NavItem = {
   href: string;
   label: string;
-  icon: 'planes' | 'rutinas' | 'documentos' | 'memorias' | 'configuracion';
+  icon:
+    | 'planes'
+    | 'rutinas'
+    | 'sensorialidad'
+    | 'tareas'
+    | 'alimentacion'
+    | 'documentos'
+    | 'memorias'
+    | 'configuracion';
 };
 
 const ICONS = {
   planes: Target,
   rutinas: ListChecks,
+  sensorialidad: Sparkles,
+  tareas: CheckSquare,
+  alimentacion: UtensilsCrossed,
   documentos: FileText,
   memorias: Brain,
   configuracion: Settings,
