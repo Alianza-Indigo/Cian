@@ -211,6 +211,14 @@ import {
 } from '../lib/db/repositories/prompts';
 import { listTenantMembersWithUsers } from '../lib/db/repositories/tenants';
 import {
+  cancelInvitation,
+  changeMemberRole,
+  countActiveMembers,
+  inviteToTenant,
+  listInvitations,
+  removeMember,
+} from '../lib/db/repositories/memberships';
+import {
   addAvailability,
   addSessionNote,
   busyIntervals,
@@ -708,6 +716,30 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     [
       'listTenantMembersWithUsers',
       (ctx) => listTenantMembersWithUsers(ctx as TenantContext),
+    ],
+
+    // --- Membresías e invitaciones a un espacio ------------------------------
+    [
+      'countActiveMembers',
+      (ctx) => countActiveMembers(ctx as TenantContext),
+    ],
+    [
+      'changeMemberRole',
+      (ctx) => changeMemberRole(ctx as TenantContext, 'usuario-2', 'member'),
+    ],
+    ['removeMember', (ctx) => removeMember(ctx as TenantContext, 'usuario-2')],
+    [
+      'inviteToTenant',
+      (ctx) =>
+        inviteToTenant(ctx as TenantContext, {
+          email: 'alguien@ejemplo.mx',
+          role: 'member',
+        }),
+    ],
+    ['listInvitations', (ctx) => listInvitations(ctx as TenantContext)],
+    [
+      'cancelInvitation',
+      (ctx) => cancelInvitation(ctx as TenantContext, CONV),
     ],
 
     // --- Fase 10: consultorios ----------------------------------------------

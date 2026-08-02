@@ -210,6 +210,12 @@ export function ConsultorioBoard({
               Todavía no hay profesionales verificados en este espacio. Un perfil
               sin verificar no aparece aquí y no puede recibir citas.
             </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Quien administra el espacio puede invitar a un profesional desde
+              Administración → Miembros, con el rol de profesional. Registrarse
+              por su cuenta no basta: eso crea un espacio nuevo, no entra al
+              tuyo.
+            </p>
           </Card>
         ) : (
           <>

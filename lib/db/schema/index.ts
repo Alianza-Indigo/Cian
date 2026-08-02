@@ -17,3 +17,4 @@ export * from './team';
 export * from './notifications';
 export * from './billing';
 export * from './consultorio';
+export * from './invitations';

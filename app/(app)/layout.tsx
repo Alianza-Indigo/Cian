@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { requireTenantContext } from '@/lib/tenant/context';
-import { getCurrentTenant } from '@/lib/db/repositories/tenants';
+import {
+  getCurrentTenant,
+  listMembershipsForUser,
+} from '@/lib/db/repositories/tenants';
 import { listConversations } from '@/lib/db/repositories/conversations';
 import { AppShell, type NavItem } from '@/components/shell/app-shell';
 import { hasRoleAtLeast } from '@/lib/tenant/guard';
@@ -38,9 +41,10 @@ export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [session, ctx] = await Promise.all([auth(), requireTenantContext()]);
-  const [tenant, conversations] = await Promise.all([
+  const [tenant, conversations, memberships] = await Promise.all([
     getCurrentTenant(ctx),
     listConversations(ctx, { limit: 100 }),
+    listMembershipsForUser(ctx.userId),
   ]);
 
   if (!tenant) {
@@ -53,6 +57,11 @@ export default async function AppLayout({
       userName={session?.user?.name ?? 'Tu cuenta'}
       userEmail={session?.user?.email ?? ''}
       navItems={NAV_ITEMS}
+      spaces={memberships.map((membership) => ({
+        id: membership.tenant.id,
+        name: membership.tenant.name,
+      }))}
+      currentTenantId={ctx.tenantId}
       /*
        * El panel solo se enseña a quien puede entrar. No es la protección —esa
        * está en el layout de `/admin` y en cada acción del repositorio— sino

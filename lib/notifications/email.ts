@@ -115,6 +115,40 @@ export function invitationEmail(input: {
 }
 
 /**
+ * Invitación a **entrar a un espacio**, que no es lo mismo que la de arriba.
+ *
+ * La del equipo de apoyo comparte recursos sueltos; esta da un rol dentro de
+ * una organización. Se distinguen en el texto a propósito: quien recibe el
+ * correo tiene que saber a qué está diciendo que sí antes de abrir el enlace.
+ *
+ * Tampoco dice nada de la salud de nadie, por la misma razón que la otra.
+ */
+export function tenantInvitationEmail(input: {
+  to: string;
+  inviterName: string;
+  acceptUrl: string;
+}): EmailMessage {
+  return {
+    to: input.to,
+    subject: `${input.inviterName} te invita a un espacio de trabajo en CIAN`,
+    text: [
+      `${input.inviterName} te invitó a trabajar en su espacio de CIAN, la`,
+      'plataforma de Alianza Índigo Neurodivergente A.C.',
+      '',
+      'Esto es distinto de que alguien te comparta un plan: al aceptar formarás',
+      'parte del espacio con un rol, y podrás usarlo junto con el resto del',
+      'equipo. Tu cuenta y tu propio espacio siguen siendo tuyos y separados.',
+      '',
+      'Para aceptar, abre este enlace con la cuenta de este mismo correo:',
+      input.acceptUrl,
+      '',
+      'La invitación caduca en dos semanas. Si no esperabas este correo, puedes',
+      'ignorarlo: sin aceptar no ocurre nada.',
+    ].join('\n'),
+  };
+}
+
+/**
  * Respaldo de un recordatorio cuando el push no llegó.
  *
  * Lleva el título y el cuerpo que la persona escribió, nada más. Sin datos de

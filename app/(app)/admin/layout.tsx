@@ -22,6 +22,7 @@ export default async function AdminLayout({
 
   const tabs = [
     { href: '/admin', label: 'Métricas' },
+    { href: '/admin/miembros', label: 'Miembros' },
     { href: '/admin/modelos', label: 'Modelos' },
     { href: '/admin/auditoria', label: 'Auditoría' },
     ...(admin.isSuperadmin

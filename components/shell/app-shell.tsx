@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
 import { signOutAction } from '@/lib/auth/actions';
+import { switchTenantAction } from '@/lib/tenant/actions';
 import {
   ConversationHistory,
   type ConversationSummary,
@@ -80,11 +81,22 @@ const ICONS = {
   admin: ShieldCheck,
 } as const;
 
+export type SpaceOption = { id: string; name: string };
+
 type AppShellProps = {
   tenantName: string;
   userName: string;
   userEmail: string;
   navItems: readonly NavItem[];
+  /**
+   * Espacios a los que pertenece esta persona.
+   *
+   * Con uno solo no se enseña nada: un selector de una opción es ruido. Deja de
+   * estar vacío en cuanto alguien acepta una invitación, que hasta ahora no se
+   * podía hacer desde ningún sitio.
+   */
+  spaces?: readonly SpaceOption[];
+  currentTenantId?: string;
   /**
    * El panel de administración, si esta persona puede entrar.
    *
@@ -103,12 +115,15 @@ export function AppShell({
   userName,
   userEmail,
   navItems,
+  spaces,
+  currentTenantId,
   adminHref,
   conversations,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -143,6 +158,39 @@ export function AppShell({
           <p className="truncate text-xs text-muted-foreground">{tenantName}</p>
         </div>
       </div>
+
+      {spaces && spaces.length > 1 ? (
+        <div>
+          <label
+            htmlFor="selector-espacio"
+            className="text-xs font-medium text-muted-foreground"
+          >
+            Espacio
+          </label>
+          <select
+            id="selector-espacio"
+            value={currentTenantId}
+            disabled={switching}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === currentTenantId) return;
+              setSwitching(true);
+              // Sin `router.refresh()`: la acción revalida el layout entero,
+              // porque al cambiar de espacio cambia absolutamente todo lo que
+              // hay en pantalla, no solo la ruta actual.
+              void switchTenantAction(next).finally(() => setSwitching(false));
+            }}
+            className="mt-1 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            style={{ minHeight: 'var(--cian-control-height)' }}
+          >
+            {spaces.map((space) => (
+              <option key={space.id} value={space.id}>
+                {space.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <Link
         href="/"
