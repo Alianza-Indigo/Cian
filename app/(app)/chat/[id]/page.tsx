@@ -5,6 +5,7 @@ import { getEffectivePreferences } from '@/lib/db/repositories/preferences';
 import { getConversation } from '@/lib/db/repositories/conversations';
 import { listMessages } from '@/lib/db/repositories/messages';
 import { toUIMessages } from '@/lib/ai/ui-messages';
+import { getSafetyDisclaimer } from '@/lib/ai/prompts';
 import { Chat } from '@/components/chat/chat';
 
 export const dynamic = 'force-dynamic';
@@ -33,9 +34,10 @@ export default async function ConversacionPage({ params }: PageProps) {
     notFound();
   }
 
-  const [rows, preferences] = await Promise.all([
+  const [rows, preferences, safetyNotice] = await Promise.all([
     listMessages(ctx, conversation.id),
     getEffectivePreferences(ctx),
+    getSafetyDisclaimer(),
   ]);
 
   return (
@@ -44,6 +46,7 @@ export default async function ConversacionPage({ params }: PageProps) {
       initialMessages={toUIMessages(rows)}
       isNew={false}
       speechRate={preferences.speechRate}
+      safetyNotice={safetyNotice}
     />
   );
 }

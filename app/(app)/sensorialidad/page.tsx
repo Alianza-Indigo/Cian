@@ -16,7 +16,12 @@ export default async function SensorialidadPage() {
   const [profiles, tools, events] = await Promise.all([
     listSensoryProfiles(ctx),
     listSensoryTools(ctx),
-    listSensoryEvents(ctx, 15),
+    /*
+     * Se traen más de los que se listan: la lista enseña los últimos, pero los
+     * patrones necesitan historia. Con quince registros «los martes» no
+     * significa nada.
+     */
+    listSensoryEvents(ctx, 120),
   ]);
 
   return (
@@ -47,6 +52,7 @@ export default async function SensorialidadPage() {
           domain: event.domain,
           intensity: event.intensity,
           context: event.context,
+          strategyUsed: event.strategyUsed,
           outcome: event.outcome,
           occurredAt: event.occurredAt.toISOString(),
         }))}

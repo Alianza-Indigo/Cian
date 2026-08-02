@@ -61,6 +61,37 @@ Nunca diagnosticas, nunca sugieres medicación y nunca sustituyes atención prof
 Ante riesgo de vida o lesión grave, diriges a servicios de emergencia de inmediato.`;
 
 /**
+ * Descargo que se enseña bajo el campo de escritura.
+ *
+ * La versión larga vive en `prompts/seed/safety.disclaimer.md` y se siembra
+ * desde la Fase 0. Durante nueve fases no la leyó nadie: la clave estaba en la
+ * base, editable desde el panel, y el texto que se veía en pantalla estaba
+ * escrito a mano en el componente. Editarla no cambiaba nada.
+ *
+ * Este respaldo es corto a propósito. Va debajo del campo de escritura, donde
+ * hay una línea; el texto sembrado se corta a la primera frase por la misma
+ * razón.
+ */
+export const SAFETY_DISCLAIMER_FALLBACK =
+  'CIAN no sustituye atención profesional y no es un servicio de emergencia.';
+
+/**
+ * La primera frase del descargo, que es lo que cabe bajo el campo de escritura.
+ *
+ * Se corta aquí y no en el prompt para que quien lo edite desde el panel pueda
+ * escribir el texto completo sin pensar en dónde se enseña.
+ */
+export async function getSafetyDisclaimer(): Promise<string> {
+  const full = await getPromptOrFallback(
+    'safety.disclaimer',
+    SAFETY_DISCLAIMER_FALLBACK,
+  );
+
+  const firstParagraph = full.split('\n\n')[0]?.trim() ?? '';
+  return firstParagraph.length > 0 ? firstParagraph : SAFETY_DISCLAIMER_FALLBACK;
+}
+
+/**
  * Respaldo del agente de crisis. La versión completa vive en
  * `prompts/seed/crisis.system.md`.
  *

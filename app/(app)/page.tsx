@@ -1,5 +1,6 @@
 import { requireTenantContext } from '@/lib/tenant/context';
 import { getEffectivePreferences } from '@/lib/db/repositories/preferences';
+import { getSafetyDisclaimer } from '@/lib/ai/prompts';
 import { Chat } from '@/components/chat/chat';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,10 @@ export default async function NuevaConversacionPage({
     requireTenantContext(),
     searchParams,
   ]);
-  const preferences = await getEffectivePreferences(ctx);
+  const [preferences, safetyNotice] = await Promise.all([
+    getEffectivePreferences(ctx),
+    getSafetyDisclaimer(),
+  ]);
 
   return (
     <Chat
@@ -34,6 +38,7 @@ export default async function NuevaConversacionPage({
       initialMessages={[]}
       isNew
       speechRate={preferences.speechRate}
+      safetyNotice={safetyNotice}
       /*
        * El botón de ayuda inmediata de `/crisis` llega aquí con `?crisis=1` y
        * el primer mensaje sale solo. Quien lo pulsó está conteniendo una crisis

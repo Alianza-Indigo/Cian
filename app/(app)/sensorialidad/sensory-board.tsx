@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Plus, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,11 @@ import {
   type SensitivityLevel,
   type SensoryDomain,
 } from '@/lib/sensory/types';
+import {
+  MIN_EVENTS_FOR_PATTERNS,
+  summarizeSensoryPatterns,
+  type Tally,
+} from '@/lib/sensory/patterns';
 import {
   addToProfileAction,
   addToolAction,
@@ -44,9 +49,33 @@ type EventItem = {
   domain: SensoryDomain;
   intensity: number | null;
   context: string | null;
+  strategyUsed: string | null;
   outcome: EventOutcome | null;
   occurredAt: string;
 };
+
+/** Una fila de conteo. Sin porcentajes: con pocos datos engañan. */
+function TallyList({ items, empty }: { items: Tally[]; empty: string }) {
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground">{empty}</p>;
+  }
+
+  return (
+    <ul className="space-y-1">
+      {items.slice(0, 6).map((item) => (
+        <li
+          key={item.label}
+          className="flex items-baseline justify-between gap-3 text-sm"
+        >
+          <span>{item.label}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {item.count} {item.count === 1 ? 'vez' : 'veces'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat('es-MX', {
@@ -69,6 +98,27 @@ export function SensoryBoard({
   const [isPending, startTransition] = useTransition();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newTool, setNewTool] = useState('');
+
+  /*
+   * Los patrones se calculan aquí, en el navegador, y no en el servidor. Las
+   * franjas horarias y los días de la semana dependen de la zona horaria de
+   * quien mira, y el servidor vive en UTC: decirle a alguien de Ciudad de
+   * México que el ruido le pesa «de madrugada» cuando le pesa por la tarde no
+   * es un dato con ruido, es un dato falso.
+   */
+  const patterns = useMemo(
+    () =>
+      summarizeSensoryPatterns(
+        events.map((event) => ({
+          occurredAt: new Date(event.occurredAt),
+          domain: event.domain,
+          intensity: event.intensity,
+          strategyUsed: event.strategyUsed,
+          outcome: event.outcome,
+        })),
+      ),
+    [events],
+  );
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string) {
     startTransition(async () => {
@@ -324,13 +374,113 @@ export function SensoryBoard({
         </Card>
       </section>
 
+      {/* --- Patrones ------------------------------------------------------- */}
+      <section aria-labelledby="patrones-sensoriales">
+        <h2
+          id="patrones-sensoriales"
+          className="text-lg font-semibold tracking-tight"
+        >
+          Lo que se repite
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Cuentas, no conclusiones. CIAN no interpreta por qué pasa lo que pasa;
+          eso lo pones tú, o quien te acompaña.
+        </p>
+
+        {!patterns.enoughData ? (
+          <Card className="mt-3">
+            <p className="text-sm text-muted-foreground">
+              {patterns.total === 0
+                ? 'Todavía no hay momentos registrados. Puedes anotarlos arriba o contárselos a CIAN en una conversación.'
+                : `Con ${patterns.total} ${
+                    patterns.total === 1 ? 'momento' : 'momentos'
+                  } todavía no se pueden ver patrones. A partir de ${MIN_EVENTS_FOR_PATTERNS} empiezan a significar algo; antes, cualquier coincidencia parece una regla.`}
+            </p>
+          </Card>
+        ) : (
+          <div
+            className="mt-3"
+            style={{
+              display: 'grid',
+              gap: 'var(--cian-gap)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))',
+            }}
+          >
+            <Card>
+              <h3 className="text-sm font-medium">Qué sentido aparece más</h3>
+              <div className="mt-2">
+                <TallyList items={patterns.byDomain} empty="Sin datos." />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-medium">A qué hora</h3>
+              <div className="mt-2">
+                <TallyList items={patterns.byTimeBand} empty="Sin datos." />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-medium">Qué día</h3>
+              <div className="mt-2">
+                <TallyList items={patterns.byWeekday} empty="Sin datos." />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                <ThumbsUp
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+                Qué ha ayudado
+              </h3>
+              <div className="mt-2">
+                <TallyList
+                  items={patterns.helped}
+                  empty="Todavía no se ha anotado ninguna estrategia con resultado."
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                <ThumbsDown
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+                Qué no ha ayudado
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vale tanto como lo anterior: ahorra intentarlo de nuevo.
+              </p>
+              <div className="mt-2">
+                <TallyList items={patterns.didNotHelp} empty="Nada anotado." />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-medium">Cómo se vivió</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cuántas veces cada nivel. Sin promedios: la intensidad es cómo
+                se vivió algo, no una calificación que haya que bajar.
+              </p>
+              <div className="mt-2">
+                <TallyList items={patterns.byIntensity} empty="Sin datos." />
+              </div>
+            </Card>
+          </div>
+        )}
+      </section>
+
       {events.length > 0 ? (
         <section style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
           <h2 className="text-lg font-semibold tracking-tight">
             Momentos registrados
           </h2>
           <ul style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
-            {events.map((event) => (
+            {/* Los últimos quince. El resto sigue contando en los patrones. */}
+            {events.slice(0, 15).map((event) => (
               <li key={event.id}>
                 <Card>
                   <p className="text-xs text-muted-foreground">

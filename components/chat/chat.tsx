@@ -16,6 +16,8 @@ type ChatProps = {
   isNew: boolean;
   /** Velocidad de lectura por voz configurada por la persona. */
   speechRate: number;
+  /** Descargo bajo el campo de escritura. Se edita desde el panel de prompts. */
+  safetyNotice: string;
   /**
    * Mensaje que se envía solo al abrir, sin que nadie escriba nada.
    *
@@ -40,6 +42,7 @@ export function Chat({
   initialMessages,
   isNew,
   speechRate,
+  safetyNotice,
   autoSend,
 }: ChatProps) {
   const router = useRouter();
@@ -229,6 +232,7 @@ export function Chat({
         onStop={stop}
         busy={busy}
         editingText={editingText}
+        safetyNotice={safetyNotice}
       />
     </div>
   );

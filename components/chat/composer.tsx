@@ -19,6 +19,14 @@ type ComposerProps = {
   busy: boolean;
   /** Si no es null, se está editando el último mensaje. */
   editingText: string | null;
+  /**
+   * El descargo que va bajo el campo.
+   *
+   * Llega desde el servidor porque vive en la tabla `prompts` y se edita desde
+   * el panel. Antes estaba escrito aquí a mano, así que editarlo en el panel
+   * no cambiaba nada de lo que se veía.
+   */
+  safetyNotice: string;
 };
 
 export function Composer({
@@ -27,6 +35,7 @@ export function Composer({
   onStop,
   busy,
   editingText,
+  safetyNotice,
 }: ComposerProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
@@ -181,7 +190,7 @@ export function Composer({
           onRecording={(file) => void addFiles([file])}
         />
         <p className="flex-1 text-center text-xs text-muted-foreground">
-          CIAN no sustituye atención profesional y no es un servicio de emergencia.
+          {safetyNotice}
         </p>
       </div>
     </form>
