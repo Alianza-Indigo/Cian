@@ -40,8 +40,11 @@ import {
   withdrawSignature,
 } from '../../consultorio/consent';
 import {
+  canJoinRoom,
   canOpenPractice,
   requiresLicense,
+  JOIN_GRACE_MINUTES_AFTER,
+  WAITING_ROOM_MINUTES_BEFORE,
   type NoteVisibility,
   type SessionTaskStatus,
   type Specialty,
@@ -49,6 +52,10 @@ import {
   type WhiteboardState,
 } from '../../consultorio/types';
 import { parseMeetingLink } from '../../consultorio/meeting';
+import {
+  fitsDeclaredAvailability,
+  joinWindow,
+} from '../../consultorio/availability';
 
 // --- Perfil profesional ------------------------------------------------------
 
@@ -361,10 +368,45 @@ export async function listAvailability(
     .orderBy(asc(availabilitySlots.weekday), asc(availabilitySlots.startTime));
 }
 
+/**
+ * La agenda propia. **Nunca la de otro.**
+ *
+ * ## Qué estaba mal
+ *
+ * Estas dos funciones recibían el `professionalId` desde el cliente y se
+ * conformaban con que la fila fuera del mismo tenant. Cuando cada persona
+ * estaba sola en su espacio, «mismo tenant» y «yo mismo» eran lo mismo. Con
+ * membresías dejaron de serlo, y cualquier integrante de una organización podía
+ * inventarle franjas a un profesional o —peor, porque destruye— **borrarle la
+ * agenda entera**.
+ *
+ * Es el mismo patrón que ya apareció en `shareResource`, en las acciones de
+ * cobro y en el menú lateral. Está anotado en NOTES como regla: código correcto
+ * cuando cada quien estaba solo deja de serlo en cuanto hay más de uno.
+ *
+ * ## Cómo se cierra
+ *
+ * El profesional se resuelve desde `ctx.userId` y no se acepta ningún
+ * identificador de fuera. Es la misma decisión que ya tomaba `practice.ts` con
+ * `myProfessionalId`: si la función no puede recibir el id, no hay forma de
+ * pasarle el equivocado.
+ *
+ * Si algún día quien administra tiene que tocar la agenda de otra persona, será
+ * una función aparte, con su comprobación de rol y su registro. No este agujero.
+ */
+async function myProfessionalIdOrThrow(ctx: TenantContext): Promise<string> {
+  const mine = await getMyProfessionalProfile(ctx);
+  if (!mine) {
+    throw new Error(
+      'No tienes perfil profesional en este espacio, así que no tienes agenda.',
+    );
+  }
+  return mine.id;
+}
+
 export async function addAvailability(
   ctx: TenantContext,
   input: {
-    professionalId: string;
     weekday: number;
     startTime: string;
     endTime: string;
@@ -373,11 +415,13 @@ export async function addAvailability(
 ): Promise<AvailabilitySlotRow> {
   assertTenantContext(ctx, 'addAvailability');
 
+  const professionalId = await myProfessionalIdOrThrow(ctx);
+
   const [row] = await db
     .insert(availabilitySlots)
     .values({
       tenantId: ctx.tenantId,
-      professionalId: input.professionalId,
+      professionalId,
       weekday: Math.min(6, Math.max(0, Math.round(input.weekday))),
       startTime: input.startTime,
       endTime: input.endTime,
@@ -395,12 +439,17 @@ export async function deleteAvailability(
 ): Promise<void> {
   assertTenantContext(ctx, 'deleteAvailability');
 
+  // El `professionalId` en el `where` es lo que impide borrar la franja de
+  // otra persona pasando su identificador: si no es tuya, no se borra nada.
+  const professionalId = await myProfessionalIdOrThrow(ctx);
+
   await db
     .delete(availabilitySlots)
     .where(
       and(
         eq(availabilitySlots.id, slotId),
         eq(availabilitySlots.tenantId, ctx.tenantId),
+        eq(availabilitySlots.professionalId, professionalId),
       ),
     );
 }
@@ -478,6 +527,37 @@ export async function requestAppointment(
   }
 
   const duration = Math.min(240, Math.max(15, input.durationMinutes));
+
+  /*
+   * La hora tiene que caber dentro de una franja declarada.
+   *
+   * Antes esto solo lo sabía la pantalla, que dibujaba los huecos a partir de
+   * la disponibilidad. El servidor aceptaba cualquier hora futura que no
+   * chocara con otra cita, así que mandar el formulario a mano bastaba para
+   * meterle a alguien una consulta a las tres de la mañana. La agenda que un
+   * profesional declara no puede valer solo en el navegador.
+   */
+  const rules = await listAvailability(ctx, input.professionalId);
+
+  const cabe = fitsDeclaredAvailability({
+    rules: rules.map((rule) => ({
+      weekday: rule.weekday,
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+      timezone: rule.timezone,
+      active: rule.active,
+    })),
+    start: input.scheduledAt,
+    durationMinutes: duration,
+  });
+
+  if (!cabe) {
+    throw new Error(
+      rules.length === 0
+        ? 'Ese profesional todavía no ha publicado sus horarios de atención.'
+        : 'Esa hora está fuera del horario de atención. Elige uno de los huecos que aparecen.',
+    );
+  }
 
   // Se vuelve a comprobar el hueco al reservar: entre que se pintó la agenda y
   // se pulsó el botón, alguien pudo tomar esa hora.
@@ -640,10 +720,39 @@ export async function setAppointmentStatus(
 
 // --- Sesión ------------------------------------------------------------------
 
+/**
+ * La sesión clínica de una cita, creándola si es la primera vez.
+ *
+ * ## Por qué no basta con ser participante
+ *
+ * Antes se creaba en cuanto alguien abría `/consultorio/<id>`, sin mirar el
+ * estado de la cita ni la hora. Eso tenía dos consecuencias, y ninguna es
+ * cosmética:
+ *
+ * - `started_at` es `defaultNow()`, así que quedaba grabado **el momento en que
+ *   alguien abrió la página**, no el de la consulta. Una cita para el jueves que
+ *   alguien mira el lunes nacía con una hora de inicio falsa.
+ * - Notas, tareas, pizarra y consentimiento cuelgan de `sessionId`. Con la
+ *   sesión creada se podía escribir en el expediente de una cita **solicitada
+ *   que nadie aceptó, o cancelada**.
+ *
+ * No es una fuga: las dos partes son participantes legítimos. Es peor de otra
+ * manera —es un registro clínico que dice que pasó algo que no pasó—.
+ *
+ * ## Qué se exige ahora
+ *
+ * Los mismos dos requisitos que la ruta de la videollamada ya exigía para dar
+ * el enlace: cita vigente y dentro de la ventana de la sala. Que la puerta y el
+ * expediente pidan lo mismo es justo lo que faltaba; antes la puerta era firme y
+ * el expediente estaba abierto de par en par.
+ *
+ * `abrir: false` es para quien solo quiere leer lo que ya existe sin crear nada.
+ */
 export async function ensureSession(
   ctx: TenantContext,
   appointmentId: string,
-): Promise<SessionRow> {
+  options: { abrir?: boolean } = {},
+): Promise<SessionRow | null> {
   assertTenantContext(ctx, 'ensureSession');
 
   const found = await getAppointmentForParticipant(ctx, appointmentId);
@@ -661,6 +770,33 @@ export async function ensureSession(
     .limit(1);
 
   if (existing) return existing;
+  if (options.abrir === false) return null;
+
+  /*
+   * A partir de aquí se crea, y crear es lo que sella `started_at`. Por eso las
+   * comprobaciones van justo antes del `insert` y no arriba: leer una sesión que
+   * ya existe no tiene por qué exigir que la sala esté abierta —una nota se
+   * repasa al día siguiente—, pero abrirla por primera vez sí.
+   */
+  const { appointment } = found;
+
+  if (!canJoinRoom(appointment.status)) {
+    throw new Error(
+      'La cita todavía no está confirmada, o ya no está vigente. Hasta ' +
+        'entonces no hay sesión que abrir.',
+    );
+  }
+
+  const window = joinWindow(
+    appointment.scheduledAt,
+    new Date(),
+    WAITING_ROOM_MINUTES_BEFORE,
+    appointment.durationMinutes + JOIN_GRACE_MINUTES_AFTER,
+  );
+
+  if (!window.open) {
+    throw new Error('La sesión no está abierta en este momento.');
+  }
 
   const [row] = await db
     .insert(consultSessions)

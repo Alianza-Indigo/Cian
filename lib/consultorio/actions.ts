@@ -133,8 +133,15 @@ export async function setVerificationStatusAction(
 
 // --- Disponibilidad ----------------------------------------------------------
 
+/*
+ * Sin `professionalId`, y es el arreglo, no un descuido de tipado.
+ *
+ * Lo aceptaba desde el cliente y el repositorio solo comprobaba el tenant, así
+ * que cualquier integrante del espacio podía inventarle franjas a un profesional
+ * o borrarle la agenda. Ahora se resuelve desde la sesión: lo que no se recibe
+ * no se puede falsificar.
+ */
 const availabilitySchema = z.object({
-  professionalId: z.uuid(),
   weekday: z.number().int().min(0).max(6),
   startTime: z.string().regex(/^\d{1,2}:\d{2}$/),
   endTime: z.string().regex(/^\d{1,2}:\d{2}$/),

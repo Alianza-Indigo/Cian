@@ -44,6 +44,7 @@ import {
 } from '../lib/consultorio/consent';
 import {
   availableSlots,
+  fitsDeclaredAvailability,
   joinWindow,
   zonedTimeToUtc,
   type AvailabilityRule,
@@ -505,5 +506,146 @@ describe('ventana para entrar a la sala', () => {
   it('está cerrada mucho después', () => {
     const window = joinWindow(scheduled, new Date('2026-08-04T16:00:00Z'), 15, 30);
     assert.equal(window.open, false);
+  });
+});
+
+/**
+ * Que el servidor exija la franja, no solo la pantalla.
+ *
+ * ## El agujero que cierra
+ *
+ * `availableSlots` decidía qué huecos se pintaban, y `requestAppointment` solo
+ * miraba que el profesional estuviera verificado, que la hora fuera futura y
+ * que no chocara con otra cita. La franja declarada no se comprobaba en ningún
+ * sitio del servidor: mandando el formulario a mano se le metía a alguien una
+ * consulta a las tres de la mañana.
+ *
+ * Lo que se prueba aquí es la regla, no el formulario: si esta función se
+ * ablanda, la agenda de quien atiende vuelve a valer solo en el navegador.
+ */
+describe('una cita tiene que caber en el horario declarado', () => {
+  // Martes de 9:00 a 11:00, hora de Ciudad de México.
+  const rules: AvailabilityRule[] = [
+    {
+      weekday: 2,
+      startTime: '09:00',
+      endTime: '11:00',
+      timezone: MEXICO,
+      active: true,
+    },
+  ];
+
+  // Martes 4 de agosto de 2026, 9:00 en México = 15:00 UTC.
+  const martes9 = new Date('2026-08-04T15:00:00Z');
+
+  it('acepta una que empieza y termina dentro', () => {
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: martes9, durationMinutes: 60 }),
+      true,
+    );
+  });
+
+  it('acepta una que llena la franja entera', () => {
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: martes9, durationMinutes: 120 }),
+      true,
+    );
+  });
+
+  it('rechaza la que se sale por el final', () => {
+    // Media sesión no es una sesión: se cortaría a la mitad.
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: martes9, durationMinutes: 121 }),
+      false,
+    );
+  });
+
+  it('rechaza la que empieza antes de abrir', () => {
+    const antes = new Date(martes9.getTime() - 60_000);
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: antes, durationMinutes: 60 }),
+      false,
+    );
+  });
+
+  it('rechaza las tres de la mañana, que es el caso que motivó todo esto', () => {
+    const madrugada = new Date('2026-08-04T09:00:00Z'); // 3:00 en México
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: madrugada, durationMinutes: 60 }),
+      false,
+    );
+  });
+
+  it('rechaza el día equivocado aunque la hora coincida', () => {
+    const miercoles9 = new Date('2026-08-05T15:00:00Z');
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: miercoles9, durationMinutes: 60 }),
+      false,
+    );
+  });
+
+  it('sin horarios declarados no cabe nada', () => {
+    /*
+     * Falla en cerrado a propósito: quien no ha dicho cuándo atiende no recibe
+     * citas. Es lo mismo que ya hacía la pantalla, que no ofrecía ningún hueco.
+     */
+    assert.equal(
+      fitsDeclaredAvailability({ rules: [], start: martes9, durationMinutes: 60 }),
+      false,
+    );
+  });
+
+  it('una franja desactivada no vale', () => {
+    const apagada = rules.map((rule) => ({ ...rule, active: false }));
+    assert.equal(
+      fitsDeclaredAvailability({
+        rules: apagada,
+        start: martes9,
+        durationMinutes: 60,
+      }),
+      false,
+    );
+  });
+
+  /*
+   * El caso que rompe las implementaciones ingenuas: la franja se ancla al día
+   * de pared **del profesional**, y ese día puede no ser el mismo que en UTC.
+   * Buscar solo «el día del instante» dejaría fuera citas legítimas de la noche.
+   */
+  it('cuenta el día del profesional, no el de UTC', () => {
+    const nocturnas: AvailabilityRule[] = [
+      {
+        weekday: 2, // martes en México
+        startTime: '20:00',
+        endTime: '22:00',
+        timezone: MEXICO,
+        active: true,
+      },
+    ];
+
+    // Martes 4 a las 20:00 en México = miércoles 5 a las 02:00 UTC.
+    const martesNoche = new Date('2026-08-05T02:00:00Z');
+
+    assert.equal(
+      fitsDeclaredAvailability({
+        rules: nocturnas,
+        start: martesNoche,
+        durationMinutes: 60,
+      }),
+      true,
+    );
+  });
+
+  it('acepta cualquier hora dentro de la franja, no solo las de la rejilla', () => {
+    /*
+     * Contención, no rejilla. `availableSlots` trocea la franja para pintarla,
+     * pero esa es una decisión de presentación: atarla al servidor rompería las
+     * citas que el profesional propone a una hora suya.
+     */
+    const yMedia = new Date(martes9.getTime() + 30 * 60_000);
+    assert.equal(
+      fitsDeclaredAvailability({ rules, start: yMedia, durationMinutes: 60 }),
+      true,
+    );
   });
 });

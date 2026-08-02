@@ -171,6 +171,79 @@ export function availableSlots(input: {
 }
 
 /**
+ * Si una cita cae **entera** dentro de una franja declarada.
+ *
+ * ## Por qué hace falta aparte de `availableSlots`
+ *
+ * `availableSlots` es lo que se pinta; esto es lo que se comprueba. Durante un
+ * tiempo solo existió lo primero, y el servidor aceptaba cualquier hora futura
+ * que no chocara con otra cita: bastaba con mandar el formulario a mano para
+ * meterle a alguien una consulta a las tres de la mañana. La agenda que uno
+ * declara no valía nada fuera de la pantalla que la dibujaba.
+ *
+ * ## Contención, no rejilla
+ *
+ * Se comprueba que la cita **quepa dentro** de una franja, no que empiece justo
+ * donde la rejilla de `availableSlots` la habría puesto. La rejilla es una
+ * decisión de presentación —cómo se trocea una franja para enseñarla— y atarla
+ * al servidor rompería las citas que el profesional propone a una hora suya, que
+ * no tienen por qué caer en múltiplos de la duración.
+ *
+ * Sin franjas declaradas no cabe nada, y es lo correcto: quien no ha dicho
+ * cuándo atiende no recibe citas. Es lo mismo que ya pasaba en la pantalla, que
+ * no ofrecía ningún hueco.
+ */
+export function fitsDeclaredAvailability(input: {
+  rules: AvailabilityRule[];
+  start: Date;
+  durationMinutes: number;
+}): boolean {
+  const end = new Date(input.start.getTime() + input.durationMinutes * 60_000);
+
+  for (const rule of input.rules) {
+    if (!rule.active) continue;
+
+    const from = parseTime(rule.startTime);
+    const to = parseTime(rule.endTime);
+    if (!from || !to) continue;
+
+    /*
+     * La franja se ancla al día de pared **del profesional**, no al de quien
+     * reserva: son zonas distintas y el día puede no coincidir. Se mira también
+     * el día anterior y el siguiente porque una cita de las 23:30 en México cae
+     * en el día siguiente en UTC, y buscar solo «hoy» la dejaría fuera.
+     */
+    for (const dayOffset of [-1, 0, 1]) {
+      const cursor = new Date(input.start.getTime() + dayOffset * 86_400_000);
+      const local = localPartsIn(cursor, rule.timezone);
+      if (local.weekday !== rule.weekday) continue;
+
+      const windowStart = zonedTimeToUtc(
+        local.year,
+        local.month,
+        local.day,
+        from.hour,
+        from.minute,
+        rule.timezone,
+      );
+      const windowEnd = zonedTimeToUtc(
+        local.year,
+        local.month,
+        local.day,
+        to.hour,
+        to.minute,
+        rule.timezone,
+      );
+
+      if (windowEnd <= windowStart) continue;
+      if (input.start >= windowStart && end <= windowEnd) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Si se puede entrar a la sala en este momento.
  *
  * La sala de espera abre antes de la hora y sigue abierta un rato después: una

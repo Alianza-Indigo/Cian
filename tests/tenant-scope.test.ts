@@ -783,7 +783,6 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       'addAvailability',
       (ctx) =>
         addAvailability(ctx as TenantContext, {
-          professionalId: CONV,
           weekday: 2,
           startTime: '09:00',
           endTime: '14:00',

@@ -466,7 +466,9 @@ export function ProfessionalBoard({
                 onClick={() =>
                   run(() =>
                     addAvailabilityAction({
-                      professionalId: profile.id,
+                      // Sin `professionalId`: el servidor resuelve de quién es
+                      // la agenda desde la sesión, no desde lo que mande esta
+                      // pantalla.
                       weekday,
                       startTime,
                       endTime,

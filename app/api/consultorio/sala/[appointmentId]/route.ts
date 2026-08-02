@@ -100,7 +100,18 @@ export async function GET(
     );
   }
 
+  /*
+   * `ensureSession` vuelve a comprobar estado y ventana por su cuenta —ahora
+   * exige lo mismo que esta ruta— así que aquí no puede fallar: si llegamos a
+   * esta línea, ya pasamos ambas. Se contempla igual porque el tiempo corre
+   * entre una comprobación y otra, y un `null` silencioso sería peor que un 409.
+   */
   const consultSession = await ensureSession(ctx, appointmentId);
+
+  if (!consultSession) {
+    return json({ error: 'La sala no está abierta en este momento.' }, 409);
+  }
+
   const consent = canStartRecording(consultSession.recordingConsent);
 
   return json(

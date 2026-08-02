@@ -304,6 +304,112 @@ cuentas. La pantalla lo dice.
 
 ---
 
+## Consultorio — Tres agujeros que encontró una revisión externa
+
+Una revisión estática del repo señaló tres cosas del consultorio. Las tres eran
+ciertas, y una se quedaba corta. Están arregladas.
+
+### 1. La agenda de cualquiera, editable y borrable por cualquiera
+
+`addAvailability` y `deleteAvailability` recibían el `professionalId` desde el
+cliente y solo comprobaban el tenant. Cualquier integrante de una organización
+podía inventarle franjas a un profesional o **borrarle la agenda entera**.
+
+La revisión mencionaba solo `add`. `delete` tenía el mismo agujero y era peor,
+porque destruye. Conviene anotarlo como método: cuando aparece un fallo de
+autorización en una función, hay que mirar a sus hermanas antes de cerrar el
+caso.
+
+**Cuarta vez del mismo patrón** en este proyecto, después de `shareResource`,
+las acciones de cobro y el menú lateral. La regla, ya sin rodeos:
+
+> **Un `where` que solo filtra por tenant no comprueba pertenencia.** Cuando cada
+> persona estaba sola en su espacio, «mismo tenant» y «yo mismo» eran lo mismo.
+> Con membresías dejaron de serlo, y todo lo escrito antes de las membresías
+> hereda esa suposición.
+
+Arreglado con `myProfessionalIdOrThrow(ctx)`: el profesional se resuelve desde la
+sesión y las funciones ya **no aceptan** el identificador. Lo que no se recibe no
+se puede falsificar. Es la misma decisión que `practice.ts` tomó desde el
+principio con `myProfessionalId`; el módulo viejo se quedó atrás.
+
+Se auditó `consultorio.ts` entero con esta lente. El resto —notas, tareas,
+compartidos, documentos de cédula, enlace de Meet, estado de la cita— sí
+comprueba `ctx.userId` o participación. Estas dos eran las únicas.
+
+### 2. Reservar fuera del horario declarado
+
+`requestAppointment` validaba profesional verificado, hora futura y choque con
+otras citas. **La franja declarada no se comprobaba en el servidor**: vivía solo
+en la pantalla que dibujaba los huecos. Mandando el formulario a mano se metía
+una consulta a las tres de la mañana.
+
+Nueva función pura `fitsDeclaredAvailability`, al lado de `availableSlots`.
+Comprueba **contención, no rejilla**: que la cita quepa entera dentro de una
+franja, no que empiece donde la rejilla la habría puesto. La rejilla es
+presentación —cómo se trocea una franja para enseñarla— y atarla al servidor
+rompería las citas que el profesional propone a una hora suya.
+
+El caso que rompe las implementaciones ingenuas, y que está probado: la franja se
+ancla al día de pared **del profesional**. Una cita del martes a las 20:00 en
+México es miércoles en UTC; buscar solo «el día del instante» la dejaría fuera.
+
+Sin franjas declaradas no cabe nada. Falla en cerrado a propósito: quien no ha
+dicho cuándo atiende no recibe citas, que es justo lo que ya hacía la pantalla.
+
+### 3. El expediente clínico se abría por visitar una URL
+
+`/consultorio/[id]` llamaba a `ensureSession` en cuanto confirmaba participación,
+sin mirar estado ni hora. Como `started_at` es `defaultNow()`, una cita del jueves
+que alguien abría el lunes nacía con **la hora en que alguien miró**. Y notas,
+tareas, pizarra y consentimiento cuelgan de `sessionId`, así que se podía escribir
+en el expediente de una cita solicitada que nadie aceptó, o cancelada.
+
+No es una fuga —las dos partes son participantes legítimos—. Es peor de otra
+manera: **un registro clínico que dice que pasó algo que no pasó.**
+
+`ensureSession` exige ahora lo mismo que la ruta de la videollamada: cita vigente
+y dentro de la ventana de la sala. Dos detalles del arreglo que importan:
+
+- Las comprobaciones van **justo antes del `insert`**, no al principio. Leer una
+  sesión que ya existe no puede exigir que la sala esté abierta: una nota se
+  repasa al día siguiente. Poner la guardia arriba habría roto el expediente en
+  lugar de protegerlo.
+- La página, cuando todavía no toca, enseña **cuándo abre la sala** en vez de un
+  error. Quien llega media hora antes no ha hecho nada mal.
+
+### Lo que la revisión acertó también en el elogio
+
+Verificado: la ruta de Meet valida participante, estado y ventana antes de
+devolver el enlace, y el enlace no viaja en el HTML. La validación de host exacto
+`meet.google.com` también está bien. Es la parte del consultorio que sí se
+escribió con desconfianza, y sirve de contraste: el problema no era que faltara
+criterio, era que el criterio no se aplicó de forma pareja.
+
+### Sobre las pruebas, y un tropiezo propio
+
+`tests/consultorio-agenda.test.ts` vigila los tres arreglos leyendo el archivo.
+Al intentar comprobar que fallaban de verdad, el primer experimento **pasó en
+verde**, y por dos razones distintas:
+
+1. El parche de prueba tocó la primera aparición del patrón, que estaba en
+   `listAvailability`, no en `deleteAvailability`. El experimento era inválido.
+2. Dos de las tres aserciones eran demasiado flojas: comprobaban que se
+   **llamara** a la función de guardia, no que su resultado **cortara** algo.
+   Una comprobación llamada y descartada es un fallo más difícil de ver que una
+   que no existe.
+
+Las tres se reforzaron para exigir el `throw`, y después se reintrodujo cada
+fallo por separado en su sitio real: los tres se detectan. La lección no es sobre
+estas pruebas concretas: **una prueba que nunca se ha visto fallar no es una
+prueba, es una expectativa.**
+
+La cobertura de comportamiento —zonas horarias, contención, franjas apagadas—
+está en `tests/consultorio.test.ts` sobre la función pura. Lo estático solo
+comprueba el cableado, y conviene saber cuál es cuál.
+
+---
+
 ## Transversal — «Mi perfil» seguía saliendo en todas las cuentas
 
 Dicho así: **«aún queda en todo tipo de cuenta [lo] de que llenen el campo de mi
