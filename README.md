@@ -11,11 +11,11 @@ diagnostica, no prescribe y no es un servicio de emergencia.
 
 ## Estado
 
-**Fase 2 — Documentos.** Cualquier conversación se convierte en un documento
-descargable con la plantilla institucional: PDF, Word, Markdown o texto. Se
-suman a lo de la Fase 1 —conversación con streaming, historial persistente y
-memoria de la persona usuaria—. Sin adjuntos, sin voz y sin módulos
-funcionales: eso llega en las fases siguientes.
+**Fase 3 — Planes y rutinas.** Los dos módulos estructurales a los que se
+conecta todo lo demás: planes de apoyo con objetivos, estrategias y
+seguimiento, y rutinas con secuencia visual paso a paso. Se suman a la
+conversación de la Fase 1 y a los documentos de la Fase 2. Sin adjuntos, sin
+voz y sin recordatorios: eso llega en las fases siguientes.
 
 El plan completo está en `CIAN_PRD_v1.md`. Se entrega **una fase por sesión** y
 no se avanza a la siguiente sin cerrar la anterior.
@@ -61,6 +61,8 @@ app/
   (auth)/login/                pantalla de acceso
   (app)/                       rutas autenticadas, con shell
     chat/[id]/                 una conversación
+    planes/[id]/               plan con objetivos y seguimiento
+    rutinas/[id]/secuencia/    la rutina paso a paso
     documentos/                biblioteca de documentos
     memorias/                  lo que CIAN recuerda de ti
     configuracion/accesibilidad/
@@ -77,6 +79,7 @@ lib/
   ai/                          modelo, prompts, tools, recorte de contexto
     tools/                     una carpeta por módulo
   documents/                   generadores de PDF, DOCX y texto
+  plans/                       planes, rutinas y su exportación
   tenant/                      guardián y resolución de tenant
   auth/                        Auth.js y aprovisionamiento
   preferences/                 accesibilidad y presentación

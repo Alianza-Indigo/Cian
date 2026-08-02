@@ -78,6 +78,33 @@ import {
   renameDocument,
   startRegeneration,
 } from '../lib/db/repositories/documents';
+import {
+  addPlanObjective,
+  addStrategy,
+  createPlan,
+  deleteObjective,
+  deletePlan,
+  deleteStrategy,
+  getPlan,
+  listPlanProgress,
+  listPlans,
+  logPlanProgress,
+  updateObjective,
+  updatePlan,
+} from '../lib/db/repositories/plans';
+import {
+  addRoutineStep,
+  createRoutine,
+  deleteRoutine,
+  deleteRoutineStep,
+  getRoutine,
+  listRoutineLogs,
+  listRoutines,
+  logRoutineCompletion,
+  reorderRoutineSteps,
+  updateRoutine,
+  updateRoutineStep,
+} from '../lib/db/repositories/routines';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -230,6 +257,73 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       (ctx) => startRegeneration(ctx as TenantContext, CONV, 'más breve'),
     ],
     ['listDocumentJobs', (ctx) => listDocumentJobs(ctx as TenantContext, CONV)],
+
+    // --- Fase 3: planes y rutinas ------------------------------------------
+    [
+      'createPlan',
+      (ctx) =>
+        createPlan(ctx as TenantContext, {
+          type: 'escolar',
+          title: 'Plan',
+          objectives: [{ title: 'Objetivo', strategies: ['Estrategia'] }],
+        }),
+    ],
+    ['getPlan', (ctx) => getPlan(ctx as TenantContext, CONV)],
+    ['listPlans', (ctx) => listPlans(ctx as TenantContext)],
+    ['updatePlan', (ctx) => updatePlan(ctx as TenantContext, CONV, { title: 'X' })],
+    ['deletePlan', (ctx) => deletePlan(ctx as TenantContext, CONV)],
+    [
+      'addPlanObjective',
+      (ctx) => addPlanObjective(ctx as TenantContext, CONV, { title: 'Objetivo' }),
+    ],
+    [
+      'updateObjective',
+      (ctx) => updateObjective(ctx as TenantContext, CONV, { title: 'X' }),
+    ],
+    ['deleteObjective', (ctx) => deleteObjective(ctx as TenantContext, CONV)],
+    ['addStrategy', (ctx) => addStrategy(ctx as TenantContext, CONV, 'texto')],
+    ['deleteStrategy', (ctx) => deleteStrategy(ctx as TenantContext, CONV)],
+    [
+      'logPlanProgress',
+      (ctx) => logPlanProgress(ctx as TenantContext, CONV, { note: 'nota' }),
+    ],
+    ['listPlanProgress', (ctx) => listPlanProgress(ctx as TenantContext, CONV)],
+
+    [
+      'createRoutine',
+      (ctx) =>
+        createRoutine(ctx as TenantContext, {
+          type: 'matutina',
+          title: 'Rutina',
+          steps: [{ title: 'Paso' }],
+        }),
+    ],
+    ['getRoutine', (ctx) => getRoutine(ctx as TenantContext, CONV)],
+    ['listRoutines', (ctx) => listRoutines(ctx as TenantContext)],
+    [
+      'updateRoutine',
+      (ctx) => updateRoutine(ctx as TenantContext, CONV, { title: 'X' }),
+    ],
+    ['deleteRoutine', (ctx) => deleteRoutine(ctx as TenantContext, CONV)],
+    [
+      'addRoutineStep',
+      (ctx) => addRoutineStep(ctx as TenantContext, CONV, { title: 'Paso' }),
+    ],
+    [
+      'updateRoutineStep',
+      (ctx) => updateRoutineStep(ctx as TenantContext, CONV, { title: 'X' }),
+    ],
+    ['deleteRoutineStep', (ctx) => deleteRoutineStep(ctx as TenantContext, CONV)],
+    [
+      'reorderRoutineSteps',
+      (ctx) => reorderRoutineSteps(ctx as TenantContext, CONV, [MSG]),
+    ],
+    [
+      'logRoutineCompletion',
+      (ctx) =>
+        logRoutineCompletion(ctx as TenantContext, CONV, { completedStepIds: [] }),
+    ],
+    ['listRoutineLogs', (ctx) => listRoutineLogs(ctx as TenantContext, CONV)],
   ];
 
 describe('assertTenantContext', () => {

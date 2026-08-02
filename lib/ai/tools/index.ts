@@ -13,6 +13,8 @@ import type { TenantContext } from '../../tenant/guard';
 import { buildMemoryTools } from './memory';
 import { buildUserContextTools } from './user-context';
 import { buildDocumentTools } from './documents';
+import { buildPlanTools } from './plans';
+import { buildRoutineTools } from './routines';
 
 export type ToolRegistry = Record<string, Tool>;
 
@@ -29,5 +31,7 @@ export function buildTools(toolContext: ToolContext): ToolRegistry {
     ...buildUserContextTools(toolContext),
     ...buildMemoryTools(toolContext),
     ...buildDocumentTools(toolContext),
+    ...buildPlanTools(toolContext),
+    ...buildRoutineTools(toolContext),
   };
 }

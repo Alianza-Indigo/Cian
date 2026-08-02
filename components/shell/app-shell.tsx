@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Brain, FileText, Menu, Plus, Settings, X } from 'lucide-react';
+import { Brain, FileText, ListChecks, Menu, Plus, Settings, Target, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CianMark } from '@/components/brand/cian-mark';
@@ -16,12 +16,14 @@ import {
 export type NavItem = {
   href: string;
   label: string;
-  icon: 'memorias' | 'documentos' | 'configuracion';
+  icon: 'planes' | 'rutinas' | 'documentos' | 'memorias' | 'configuracion';
 };
 
 const ICONS = {
-  memorias: Brain,
+  planes: Target,
+  rutinas: ListChecks,
   documentos: FileText,
+  memorias: Brain,
   configuracion: Settings,
 } as const;
 

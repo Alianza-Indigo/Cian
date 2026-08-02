@@ -7,3 +7,5 @@ export * from './chat';
 export * from './memories';
 export * from './usage';
 export * from './documents';
+export * from './plans';
+export * from './routines';

@@ -36,6 +36,13 @@
       "when": 1785628583077,
       "tag": "0004_right_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785629280110,
+      "tag": "0005_naive_klaw",
+      "breakpoints": true
     }
   ]
 }

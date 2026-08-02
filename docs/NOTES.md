@@ -5,6 +5,75 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Fase 3 — Planes y rutinas
+
+### Lo que quedó verificado
+
+- **634 pruebas**, build y typecheck limpios.
+- **El plan exportado produce Markdown que el generador de la Fase 2
+  entiende**: se comprueba que los objetivos salen como encabezados y las
+  estrategias como viñetas, no como prosa suelta.
+- **El aislamiento por tenant cubre las 23 funciones nuevas** de planes y
+  rutinas.
+
+### Lo que no se pudo verificar
+
+Todo lo que depende de que el modelo responda:
+
+1. Que «necesito una rutina matutina para mi hijo de 7 años que se distrae
+   mucho» produzca pasos ordenados con duraciones razonables.
+2. Que «convierte esto en un plan» produzca objetivos y estrategias coherentes
+   con lo hablado.
+
+El esquema de las tools obliga a que un plan traiga objetivos con estrategias
+y una rutina traiga pasos: si el modelo devuelve prosa, Zod lo rechaza y tiene
+que reintentar. Eso garantiza la **forma**, no la calidad del contenido.
+
+### El registro de tools ya va en 16
+
+Con esta fase el orquestador expone dieciséis tools. Es justo el punto que se
+anotó al elegir Flash-Lite: conviene medir si sigue enrutando bien, sobre todo
+cuando la petición podría resolverse con varias (`createPlan` frente a
+`createDocument`, por ejemplo). Si empieza a fallar, la salida está prevista en
+`model_configs` de la Fase 9: modelo por propósito.
+
+### Decisiones que conviene no revertir sin leer esto
+
+- **Reordenar pasos se hace con botones de subir y bajar, no arrastrando.** El
+  criterio pide que funcione por teclado; con botones, el teclado y el lector
+  de pantalla salen gratis, y en teléfono es más preciso que arrastrar. La
+  interfaz manda la lista completa al servidor, no «sube este»: así no quedan
+  estados intermedios con índices repetidos.
+
+- **La secuencia visual no lleva temporizador.** La duración se muestra como
+  referencia («suele tomar 5 min»), nunca como cuenta regresiva. Un cronómetro
+  convierte la rutina en una carrera, y el avance automático es justo lo que la
+  regla 3.7 prohíbe.
+
+- **Al cambiar de paso, el foco se mueve al encabezado del paso nuevo.** Sin
+  eso, quien navega con teclado o lector de pantalla vuelve al principio de la
+  página en cada avance.
+
+- **Un plan se crea completo o no se crea.** `createPlan` inserta plan,
+  objetivos y estrategias en una transacción: un plan con objetivos pero sin
+  estrategias deja a la persona sin saber si fue un error o si así se generó.
+
+### Deuda técnica
+
+- **`routine_steps.image_url` existe en el esquema pero no hay forma de subir
+  imágenes.** Las imágenes llegan con los adjuntos de la Fase 4. Por ahora solo
+  se admite un emoji como icono.
+
+- **La constancia de rutinas es una lista de fechas**, no una vista de
+  patrones. El PRD pide «vista simple de constancia» y eso es lo que hay; si
+  hiciera falta más, los datos ya están en `routine_logs`.
+
+- **Editar el título de un plan o una rutina guarda al perder el foco**, sin
+  botón. Es cómodo pero poco explícito: alguien que escribe y cierra la pestaña
+  sin quitar el foco pierde el cambio.
+
+---
+
 ## Fase 2 — Documentos
 
 ### Lo que sí quedó verificado en ejecución
