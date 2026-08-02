@@ -71,19 +71,88 @@ Se mantiene la regla que ya existía: sin términos aceptados no se verifica a
 nadie, tampoco desde plataforma. Verificar a quien no ha declarado que la
 responsabilidad profesional es suya sería firmar por él.
 
-### Lo que aún no se puede hacer desde plataforma
+### Miembros y roles en cualquier espacio
 
-Anotado, no resuelto:
+Se hizo después, en la misma sesión, y cierra un caso que antes no tenía salida:
+una organización cuya única administradora se va —o pierde el acceso a su
+cuenta— se quedaba **sin nadie que pudiera nombrar a otra**. No se podía
+invitar, ni verificar, ni cancelar la suscripción, y del estado no se salía sin
+tocar la base a mano.
 
-- **Cambiar roles o dar de baja miembros de otro espacio.** Hoy se ven los
-  miembros y sus roles desde `/admin/espacios/[tenantId]`, pero modificarlos
-  sigue siendo solo por espacio, desde `/admin/miembros`.
-- **Ajustar el plan o los límites de otro espacio.** `/admin/planes` es global
-  (define los planes); no hay forma de mover un espacio concreto de plan ni de
-  subirle un límite puntual sin pasar por Stripe.
+`setMemberRoleAnywhere` y `removeMemberAnywhere` no escriben en `tenant_members`
+directamente: entran por `changeMemberRole` y `removeMember`, el repositorio de
+siempre, con un `TenantContext` del espacio ajeno. Eso importa, porque ese
+repositorio es el que sabe que **un espacio nunca puede quedarse sin
+propietaria**. Copiar esa regla en el módulo de plataforma habría dejado dos
+copias que con el tiempo dejan de decir lo mismo.
 
-Ambas caen del lado «sí» de la línea: son operación, no contenido. No se
-hicieron ahora por alcance, no por criterio.
+Antes de tocar nada se comprueba que esa persona esté de verdad en ese espacio.
+Sin esa comprobación el `update` no encontraría fila, la pantalla diría «rol
+actualizado» y en la bitácora quedaría escrito un cambio que nunca ocurrió. Un
+registro que miente es peor que no tenerlo.
+
+Retirar a alguien le quita el acceso a lo compartido de ese espacio y **no borra
+lo suyo**: sus conversaciones, documentos y bitácoras siguen donde estaban, y
+desde plataforma no se ven ni antes ni después.
+
+### Concesiones de plataforma: plan y límites sin pasar por Stripe
+
+También de esta sesión. Faltaba poder decir «esta asociación no paga» sin montar
+un cobro de cero pesos, y subirle los asientos a una escuela durante un ciclo
+escolar sin que nadie meta una tarjeta.
+
+**Por qué son columnas nuevas en `tenants` y no se escribe en `tenants.plan`.**
+`syncSubscriptionFromStripe` reescribe esa columna en cada webhook y en cada
+pasada del cron de reconciliación. Una concesión guardada ahí desaparecería sola
+la próxima vez que Stripe dijera cualquier cosa —sin error, sin aviso— y el
+espacio perdería lo concedido sin que nadie se enterara. Por eso van aparte:
+`platform_plan`, `platform_limits`, `platform_note`, `platform_granted_at` y
+`platform_granted_by` (migración 0021, aditiva).
+
+**La regla que hace que esta pantalla no pueda hacer daño: una concesión solo
+suma.** Se aplica cuando es más generosa que lo que el espacio ya paga, nunca
+cuando es menor. Conceder `personal` a quien paga `organization` no le quita
+nada; conceder 10 mensajes a un plan sin tope no le pone uno. Así, equivocarse
+de espacio, de campo o de cero no puede dejar a nadie con menos de lo que compró.
+
+Para **bajar** de plan se cambia la suscripción en Stripe, que es donde vive el
+dinero. Para retirar un regalo basta con vaciar los campos, y el espacio vuelve
+exactamente a lo suyo.
+
+La regla vive en `lib/billing/limits.ts` —módulo puro, sin base de datos— junto
+a `sanitizeGrantedLimits`, que recorta números absurdos y devuelve `null` en vez
+de `{}` cuando no queda nada concedido. Ambas cosas están probadas frontera por
+frontera en `tests/billing.test.ts`: son fáciles de romper al refactorizar (un
+`>` por un `>=`, aplicar el `Partial` encima sin comparar) y el daño sería
+silencioso —un espacio que de pronto no puede escribir, sin ningún error que lo
+explique—.
+
+Se aplica donde se decide si algo cabe: `enforceLimit`, `planOverview` y
+`checkSeats` pasaron a `getTenantPlanLimits`, que resuelve plan y límites **de
+ese espacio** con la concesión ya dentro. `getPlanLimits(plan)` sigue existiendo
+para `/admin/planes`, que edita los planes en abstracto.
+
+### La prueba de la bitácora, ahora general
+
+Cuando el registro de auditoría pasó a un helper compartido
+(`registrarEnEspacio`), la prueba que comprobaba una sola función se quedó
+corta. Ahora recorre **todas** las funciones exportadas del módulo y exige que
+cualquiera que no esté en una lista explícita de solo-lectura pase por el
+helper. La lista es explícita a propósito: una función nueva se considera de
+escritura hasta que alguien la añada, y añadirla se ve en el diff. Detectar la
+escritura automáticamente fallaría en abierto el día que alguien mutara a través
+de un repositorio que el módulo no conoce.
+
+Comprobado que falla de verdad quitándole el registro a `setPlatformGrant`:
+`estas operaciones cambian algo en un espacio ajeno sin dejar constancia:
+setPlatformGrant`.
+
+### Lo que sigue sin poder hacerse desde plataforma
+
+- **Bajar el plan de un espacio por debajo de lo que paga.** Es deliberado, no
+  un pendiente: eso se hace en Stripe.
+- **Invitar a alguien a un espacio ajeno.** Se pueden cambiar roles y retirar,
+  pero no mandar la invitación. No apareció ningún caso que lo pidiera.
 
 ---
 

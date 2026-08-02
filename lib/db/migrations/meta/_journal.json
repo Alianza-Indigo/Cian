@@ -148,6 +148,13 @@
       "when": 1785694153185,
       "tag": "0020_normal_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785696587769,
+      "tag": "0021_lowly_madame_web",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { users } from './auth';
+import type { PlanLimits } from '../../billing/types';
 
 /** Rol dentro de un tenant. Coincide con `TenantContext['role']`. */
 export const memberRoleEnum = pgEnum('member_role', [
@@ -54,6 +55,39 @@ export const tenants = pgTable(
     name: text('name').notNull(),
     plan: tenantPlanEnum('plan').notNull().default('free'),
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
+
+    /*
+     * --- Concesión de plataforma --------------------------------------------
+     *
+     * Capacidad regalada a un espacio desde la administración de plataforma,
+     * sin pasar por Stripe: una asociación a la que se le abre el plan de
+     * organización, una escuela a la que se le suben los asientos durante un
+     * curso, un espacio en pruebas.
+     *
+     * **Por qué son columnas aparte y no se escribe en `plan` directamente.**
+     * `syncSubscriptionFromStripe` reescribe `tenants.plan` en cada webhook y
+     * en cada pasada del cron de reconciliación. Una concesión guardada ahí
+     * desaparecería sola la próxima vez que Stripe dijera cualquier cosa, sin
+     * error y sin aviso, y el espacio perdería lo que se le concedió sin que
+     * nadie se enterara. Guardada aquí, sobrevive.
+     *
+     * La concesión **solo suma**: se aplica cuando es más generosa que el plan
+     * pagado, nunca cuando es menor. Así, un descuido en esta pantalla no puede
+     * quitarle a nadie lo que está pagando. Para bajar de plan se toca Stripe,
+     * que es donde vive el dinero; para retirar un regalo, basta con quitarlo.
+     */
+    platformPlan: tenantPlanEnum('platform_plan'),
+    platformLimits: jsonb('platform_limits').$type<Partial<PlanLimits>>(),
+    /** Por qué se concedió. Lo lee quien venga después a preguntarse por qué. */
+    platformNote: text('platform_note'),
+    platformGrantedAt: timestamp('platform_granted_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    platformGrantedBy: text('platform_granted_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),

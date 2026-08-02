@@ -18,8 +18,11 @@ import { createHmac } from 'node:crypto';
 import {
   checkLimit,
   currentPeriodStart,
+  effectivePlan,
+  grantLimits,
   nextPlan,
   resolveLimits,
+  sanitizeGrantedLimits,
 } from '../lib/billing/limits';
 import {
   DEFAULT_PLAN_LIMITS,
@@ -454,5 +457,113 @@ describe('formato de tamaños', () => {
     assert.equal(formatBytes(200 * 1024 * 1024), '200 MB');
     assert.equal(formatBytes(2048 * 1024 * 1024), '2 GB');
     assert.equal(formatBytes(500 * 1024), '500 KB');
+  });
+});
+
+/**
+ * Concesiones de plataforma.
+ *
+ * La regla que se prueba aquí es la que hace que la pantalla de administración
+ * de plataforma no pueda hacer daño: **una concesión solo suma**. Si alguien se
+ * equivoca de espacio, o de campo, o se le va un cero hacia abajo, nadie pierde
+ * lo que está pagando.
+ *
+ * Es una regla fácil de romper al refactorizar —basta con cambiar un `>` por un
+ * `>=` mal puesto, o con aplicar el `Partial` encima sin comparar— y el daño
+ * sería silencioso: un espacio que de pronto no puede escribir, sin ningún
+ * error que lo explique.
+ */
+describe('una concesión de plataforma solo suma', () => {
+  it('sube el plan cuando lo concedido es mayor', () => {
+    assert.equal(effectivePlan('free', 'organization'), 'organization');
+    assert.equal(effectivePlan('free', 'personal'), 'personal');
+  });
+
+  it('no baja el plan de quien paga más de lo que se le concede', () => {
+    // El caso que importa: conceder `personal` a quien paga `organization`
+    // no puede quitarle lo que compró.
+    assert.equal(effectivePlan('organization', 'personal'), 'organization');
+    assert.equal(effectivePlan('personal', 'free'), 'personal');
+  });
+
+  it('sin concesión, manda lo que se paga', () => {
+    for (const plan of PLANS) {
+      assert.equal(effectivePlan(plan, null), plan);
+    }
+  });
+
+  it('sube un límite puntual y deja el resto como está', () => {
+    const base = DEFAULT_PLAN_LIMITS.free;
+    const limits = grantLimits(base, { mensajes: 5000 });
+
+    assert.equal(limits.mensajes, 5000);
+    assert.equal(limits.documentos, base.documentos);
+    assert.equal(limits.almacenamiento, base.almacenamiento);
+    assert.equal(limits.asientos, base.asientos);
+  });
+
+  it('no baja un límite por debajo del que da el plan', () => {
+    const base = DEFAULT_PLAN_LIMITS.personal;
+    const limits = grantLimits(base, { mensajes: 10, asientos: 0 });
+
+    assert.equal(limits.mensajes, base.mensajes);
+    assert.equal(limits.asientos, base.asientos);
+  });
+
+  it('«sin límite» gana a cualquier número', () => {
+    const limits = grantLimits(DEFAULT_PLAN_LIMITS.free, { mensajes: null });
+    assert.equal(limits.mensajes, null);
+  });
+
+  it('un número no le quita el «sin límite» que ya daba el plan', () => {
+    // `organization` no limita mensajes. Conceder 10 no puede ponerle un tope.
+    const limits = grantLimits(DEFAULT_PLAN_LIMITS.organization, {
+      mensajes: 10,
+    });
+
+    assert.equal(limits.mensajes, null);
+  });
+
+  it('sin concesión devuelve los límites del plan tal cual', () => {
+    const base = DEFAULT_PLAN_LIMITS.personal;
+    assert.deepEqual(grantLimits(base, null), base);
+    assert.deepEqual(grantLimits(base, undefined), base);
+    assert.deepEqual(grantLimits(base, {}), base);
+  });
+});
+
+describe('una concesión se sanea antes de guardarse', () => {
+  it('un número absurdo se recorta en vez de guardarse tal cual', () => {
+    // Un cero de más en un formulario no debería llegar a la base.
+    const limits = sanitizeGrantedLimits({ mensajes: 99_999_999_999 });
+    assert.ok(limits);
+    assert.ok(limits.mensajes !== null && limits.mensajes! <= 1_000_000);
+  });
+
+  it('cero asientos no deja un espacio donde no cabe nadie', () => {
+    assert.equal(sanitizeGrantedLimits({ asientos: 0 })?.asientos, 1);
+  });
+
+  it('lo que no es un número se descarta, no se guarda como NaN', () => {
+    const limits = sanitizeGrantedLimits({
+      mensajes: Number.NaN,
+      documentos: 50,
+    });
+
+    assert.deepEqual(limits, { documentos: 50 });
+  });
+
+  it('«sin límite» se conserva', () => {
+    assert.deepEqual(sanitizeGrantedLimits({ mensajes: null }), { mensajes: null });
+  });
+
+  it('retirar la concesión deja `null`, no un objeto vacío', () => {
+    // Un `{}` guardado se leería después como «hay algo concedido».
+    assert.equal(sanitizeGrantedLimits({}), null);
+    assert.equal(sanitizeGrantedLimits(null), null);
+  });
+
+  it('un negativo no se convierte en un tope imposible de cumplir', () => {
+    assert.equal(sanitizeGrantedLimits({ documentos: -5 })?.documentos, 0);
   });
 });

@@ -16,10 +16,11 @@
  * ## Dónde está la línea, exactamente
  *
  * **Sí se puede ver y hacer, en cualquier espacio:**
- * espacios y sus planes, quién es miembro y con qué rol, perfiles profesionales
- * con su cédula y sus documentos, verificar y retirar verificaciones, la
- * actividad del consultorio —cuántas citas, entre quiénes, en qué estado—,
- * consumo y límites, y la bitácora de auditoría.
+ * espacios y sus planes, quién es miembro y con qué rol —y cambiárselo, o
+ * retirarle—, perfiles profesionales con su cédula y sus documentos, verificar
+ * y retirar verificaciones, la actividad del consultorio —cuántas citas, entre
+ * quiénes, en qué estado—, conceder plan y límites sin pasar por Stripe, y la
+ * bitácora de auditoría.
  *
  * **Nunca, por ninguna función de este módulo:**
  * el contenido de las conversaciones con CIAN, las notas de sesión, los
@@ -33,9 +34,18 @@
  *
  * ## Todo queda registrado
  *
- * Cada operación que escribe en un espacio ajeno pasa por `recordAudit` con el
- * tenant afectado. Poder hacerlo todo y que no quede rastro sería lo peligroso;
- * poder hacerlo todo y que quede, es administrar.
+ * Cada operación que escribe en un espacio ajeno pasa por `registrarEnEspacio`,
+ * que deja la fila en la bitácora **del espacio afectado**. Poder hacerlo todo y
+ * que no quede rastro sería lo peligroso; poder hacerlo todo y que quede, es
+ * administrar. La misma prueba de arriba falla si se añade una operación de
+ * escritura que no pase por ahí.
+ *
+ * ## Lo que se concede no puede quitar
+ *
+ * `setPlatformGrant` regala plan y límites sin tocar Stripe, y **solo suma**: se
+ * aplica cuando es más generoso que lo que el espacio ya paga. Equivocarse en
+ * esa pantalla no puede dejar a nadie con menos de lo que compró. La regla vive
+ * en `lib/billing/limits.ts`, que es puro y está probado frontera por frontera.
  */
 import { and, count, desc, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
@@ -48,9 +58,11 @@ import {
   type LicenseDoc,
 } from '../db/schema/consultorio';
 import { auditLog } from '../db/schema/audit';
+import { changeMemberRole, removeMember } from '../db/repositories/memberships';
+import { effectivePlan, sanitizeGrantedLimits } from '../billing/limits';
 import { assertSuperadmin } from './access';
-import type { MemberRole } from '../tenant/guard';
-import type { Plan } from '../billing/types';
+import type { MemberRole, TenantContext } from '../tenant/guard';
+import type { Plan, PlanLimits } from '../billing/types';
 import type { Specialty, VerificationStatus } from '../consultorio/types';
 
 // --- Espacios ----------------------------------------------------------------
@@ -64,6 +76,8 @@ export type SpaceSummary = {
   professionals: number;
   appointments: number;
   createdAt: Date;
+  /** `true` si el plan no lo paga: se lo concedió la plataforma. */
+  granted?: boolean;
 };
 
 /** Todos los espacios de la plataforma, con lo que hace falta para operarla. */
@@ -76,6 +90,7 @@ export async function listSpaces(): Promise<SpaceSummary[]> {
       name: tenants.name,
       slug: tenants.slug,
       plan: tenants.plan,
+      platformPlan: tenants.platformPlan,
       createdAt: tenants.createdAt,
     })
     .from(tenants)
@@ -121,8 +136,13 @@ export async function listSpaces(): Promise<SpaceSummary[]> {
   const porProfesionales = mapa(profesionales);
   const porCitas = mapa(citas);
 
-  return filas.map((fila) => ({
+  return filas.map(({ platformPlan, ...fila }) => ({
     ...fila,
+    // El plan que se ve en la lista es el que la gente tiene de verdad, con la
+    // concesión ya aplicada. Ver un `free` en un espacio al que se le abrió el
+    // plan sería contar una cosa distinta de la que pasa.
+    plan: effectivePlan(fila.plan, platformPlan),
+    granted: platformPlan !== null,
     members: porMiembros.get(fila.id) ?? 0,
     professionals: porProfesionales.get(fila.id) ?? 0,
     appointments: porCitas.get(fila.id) ?? 0,
@@ -172,6 +192,10 @@ export type SpaceDetail = {
   members: SpaceMember[];
   professionals: SpaceProfessional[];
   appointments: SpaceAppointment[];
+  /** Lo que se paga en Stripe, antes de aplicar ninguna concesión. */
+  paidPlan: Plan;
+  /** Lo que la plataforma le regaló a este espacio, si algo. */
+  grant: PlatformGrant;
 };
 
 export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null> {
@@ -255,12 +279,22 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
     ),
   );
 
+  const pagado = suscripcion[0]?.plan ?? space.plan;
+
   return {
+    paidPlan: pagado,
+    grant: {
+      plan: space.platformPlan,
+      limits: space.platformLimits,
+      note: space.platformNote,
+      grantedAt: space.platformGrantedAt,
+    },
     space: {
       id: space.id,
       name: space.name,
       slug: space.slug,
-      plan: suscripcion[0]?.plan ?? space.plan,
+      // El que vale es el mayor de los dos: la concesión solo suma.
+      plan: effectivePlan(pagado, space.platformPlan),
       members: miembros.filter((m) => m.status === 'active').length,
       professionals: perfiles.length,
       appointments: totalCitas[0]?.total ?? 0,
@@ -291,6 +325,73 @@ export async function spaceDetail(tenantId: string): Promise<SpaceDetail | null>
 }
 
 // --- Actuar sobre un espacio -------------------------------------------------
+
+/**
+ * Deja constancia en la bitácora **del espacio afectado**, no en la de quien
+ * actúa.
+ *
+ * Es el detalle que separa administrar de espiar: quien administre ese espacio
+ * abre su auditoría y ve que alguien de plataforma tocó algo suyo, con qué
+ * acción y cuándo. Enterarse por otro lado, o no enterarse, sería peor.
+ *
+ * Toda función de este módulo que escriba pasa por aquí. Hay una prueba que lo
+ * comprueba, para que añadir una operación nueva sin registro no pase colada.
+ */
+async function registrarEnEspacio(
+  tenantId: string,
+  adminUserId: string,
+  entrada: {
+    action: string;
+    entity: string;
+    entityId: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await db.insert(auditLog).values({
+    tenantId,
+    userId: adminUserId,
+    action: entrada.action,
+    entity: entrada.entity,
+    entityId: entrada.entityId,
+    metadata: { ...entrada.metadata, porPlataforma: true },
+  });
+}
+
+/**
+ * Contexto del espacio ajeno, para poder reutilizar el repositorio de siempre.
+ *
+ * Podría escribir en `tenant_members` directamente, y sería un error: el
+ * repositorio de membresías es el que sabe que **un espacio nunca puede quedarse
+ * sin propietaria**. Un espacio sin `owner` no lo administra nadie —no se puede
+ * invitar, ni verificar, ni cancelar la suscripción— y es un estado del que no
+ * se sale sin tocar la base a mano.
+ *
+ * Copiar esa regla aquí significaría tener dos copias que con el tiempo dejarían
+ * de decir lo mismo. Mejor entrar por la misma puerta con las llaves puestas.
+ */
+function contextoDe(tenantId: string, adminUserId: string): TenantContext {
+  return { tenantId, userId: adminUserId, role: 'owner' };
+}
+
+/**
+ * Comprueba que esa persona esté de verdad en ese espacio.
+ *
+ * Sin esto, cambiar el rol de alguien que no es miembro no daría error: el
+ * `update` no encontraría ninguna fila, la pantalla diría «rol actualizado» y
+ * en la bitácora quedaría escrito un cambio que nunca ocurrió. Un registro que
+ * miente es peor que no tenerlo.
+ */
+async function exigirMiembro(tenantId: string, userId: string): Promise<void> {
+  const [fila] = await db
+    .select({ userId: tenantMembers.userId })
+    .from(tenantMembers)
+    .where(
+      and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)),
+    )
+    .limit(1);
+
+  if (!fila) throw new Error('Esa persona no está en este espacio.');
+}
 
 /**
  * Verifica —o retira la verificación de— un profesional de cualquier espacio.
@@ -337,20 +438,130 @@ export async function setVerificationAnywhere(
     })
     .where(eq(professionals.id, professionalId));
 
-  /*
-   * La auditoría se escribe en el tenant afectado, no en el de quien actúa.
-   * Así, quien administre ese espacio ve en su propia bitácora que alguien de
-   * plataforma tocó algo suyo. Enterarse por otro lado sería peor.
-   */
-  await db.insert(auditLog).values({
-    tenantId,
-    userId: admin.ctx.userId,
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
     action: 'plataforma.verificacion',
     entity: 'professional',
     entityId: professionalId,
-    metadata: { status, porPlataforma: true },
+    metadata: { status },
   });
 }
+
+// --- Miembros y roles, en cualquier espacio ----------------------------------
+
+/**
+ * Cambia el rol de alguien en cualquier espacio.
+ *
+ * Hasta ahora esto solo se podía hacer desde dentro del propio espacio, y eso
+ * dejaba un caso sin salida: una organización cuya única administradora se va,
+ * o pierde el acceso a su cuenta, se quedaba sin nadie que pudiera nombrar a
+ * otra. Desde aquí se resuelve en un minuto.
+ *
+ * Se apoya en el repositorio de siempre, así que sigue valiendo la regla de que
+ * un espacio nunca se queda sin propietaria.
+ */
+export async function setMemberRoleAnywhere(
+  tenantId: string,
+  userId: string,
+  role: MemberRole,
+): Promise<void> {
+  const admin = await assertSuperadmin('setMemberRoleAnywhere');
+
+  await exigirMiembro(tenantId, userId);
+  await changeMemberRole(contextoDe(tenantId, admin.ctx.userId), userId, role);
+
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
+    action: 'plataforma.rol',
+    entity: 'tenant_member',
+    entityId: userId,
+    metadata: { role },
+  });
+}
+
+/**
+ * Saca a alguien de cualquier espacio.
+ *
+ * Deja de tener acceso a lo compartido de ese espacio. **Lo suyo no se borra**:
+ * sus conversaciones, sus documentos y sus bitácoras siguen donde estaban, y
+ * esta operación ni los toca ni los muestra.
+ */
+export async function removeMemberAnywhere(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  const admin = await assertSuperadmin('removeMemberAnywhere');
+
+  await exigirMiembro(tenantId, userId);
+  await removeMember(contextoDe(tenantId, admin.ctx.userId), userId);
+
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
+    action: 'plataforma.miembro_retirado',
+    entity: 'tenant_member',
+    entityId: userId,
+  });
+}
+
+// --- Plan y límites de un espacio --------------------------------------------
+
+export type PlatformGrant = {
+  plan: Plan | null;
+  limits: Partial<PlanLimits> | null;
+  note: string | null;
+  grantedAt: Date | null;
+};
+
+/**
+ * Concede —o retira— plan y límites a un espacio, sin pasar por Stripe.
+ *
+ * Es lo que hacía falta para poder decir «esta asociación no paga» sin montar
+ * un cobro de cero pesos, y para subirle los asientos a una escuela durante un
+ * curso escolar sin que nadie tenga que meter una tarjeta.
+ *
+ * **La concesión solo suma.** Se aplica cuando es más generosa que lo que el
+ * espacio ya paga, nunca cuando es menor: un descuido aquí no puede quitarle a
+ * nadie lo que está pagando. Para bajar de plan se cambia la suscripción en
+ * Stripe, que es donde vive el dinero. Para retirar el regalo, se pasa `null` y
+ * el espacio vuelve exactamente a lo suyo.
+ *
+ * Los números se saneen antes de guardarse: un límite negativo, o uno absurdo
+ * fruto de un dedazo, guardado tal cual serían un problema difícil de ver desde
+ * la pantalla de alguien que de repente no puede escribir.
+ */
+export async function setPlatformGrant(
+  tenantId: string,
+  grant: { plan: Plan | null; limits: Partial<PlanLimits> | null; note: string | null },
+): Promise<void> {
+  const admin = await assertSuperadmin('setPlatformGrant');
+
+  const [space] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (!space) throw new Error('No encontramos ese espacio.');
+
+  const limits = sanitizeGrantedLimits(grant.limits);
+  const vacia = grant.plan === null && limits === null;
+
+  await db
+    .update(tenants)
+    .set({
+      platformPlan: grant.plan,
+      platformLimits: limits,
+      platformNote: vacia ? null : (grant.note?.trim().slice(0, 500) || null),
+      platformGrantedAt: vacia ? null : new Date(),
+      platformGrantedBy: vacia ? null : admin.ctx.userId,
+    })
+    .where(eq(tenants.id, tenantId));
+
+  await registrarEnEspacio(tenantId, admin.ctx.userId, {
+    action: vacia ? 'plataforma.concesion_retirada' : 'plataforma.concesion',
+    entity: 'tenant',
+    entityId: tenantId,
+    metadata: { plan: grant.plan, limits },
+  });
+}
+
 
 /** Últimos movimientos de plataforma, para poder responder quién hizo qué. */
 export async function platformAuditTrail(limit = 100) {

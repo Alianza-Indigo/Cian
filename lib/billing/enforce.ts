@@ -21,8 +21,7 @@
 import { checkLimit, type LimitVerdict } from './limits';
 import type { LimitedResource } from './types';
 import {
-  getEffectivePlan,
-  getPlanLimits,
+  getTenantPlanLimits,
   getUsageSnapshot,
 } from '../db/repositories/billing';
 import type { TenantContext } from '../tenant/guard';
@@ -33,9 +32,10 @@ export async function enforceLimit(
   amount = 1,
 ): Promise<LimitVerdict> {
   try {
-    const plan = await getEffectivePlan(ctx);
-    const [limits, usage] = await Promise.all([
-      getPlanLimits(plan),
+    // Con la concesión de plataforma ya aplicada: si a este espacio se le
+    // subió un límite a mano, es este el que manda.
+    const [{ plan, limits }, usage] = await Promise.all([
+      getTenantPlanLimits(ctx),
       getUsageSnapshot(ctx),
     ]);
 
@@ -53,9 +53,8 @@ export async function enforceLimit(
 
 /** Todo lo que la pantalla de membresía necesita, en una llamada. */
 export async function planOverview(ctx: TenantContext) {
-  const plan = await getEffectivePlan(ctx);
-  const [limits, usage] = await Promise.all([
-    getPlanLimits(plan),
+  const [{ plan, limits }, usage] = await Promise.all([
+    getTenantPlanLimits(ctx),
     getUsageSnapshot(ctx),
   ]);
 

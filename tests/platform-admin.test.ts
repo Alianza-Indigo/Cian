@@ -91,41 +91,70 @@ describe('la administración de plataforma no lee contenido privado', () => {
   }
 });
 
+/** Nombre y cuerpo de cada función exportada del módulo. */
+function exportadas(): Array<{ nombre: string; cuerpo: string }> {
+  const marcas = [...codigo.matchAll(/export async function (\w+)\(/g)];
+
+  return marcas.map((marca, indice) => {
+    const inicio = marca.index;
+    const fin = marcas[indice + 1]?.index ?? codigo.length;
+    return { nombre: marca[1] as string, cuerpo: codigo.slice(inicio, fin) };
+  });
+}
+
+/**
+ * Funciones que solo leen y por eso no dejan rastro.
+ *
+ * La lista es explícita a propósito: cualquier función nueva se considera de
+ * escritura hasta que alguien la ponga aquí, y ponerla aquí se ve en el diff.
+ * Al revés —detectar la escritura sola— fallaría en abierto el día que alguien
+ * mutara a través de un repositorio que este archivo no conoce.
+ */
+const SOLO_LEEN = ['listSpaces', 'spaceDetail', 'platformAuditTrail'];
+
 describe('todo lo que escribe en un espacio ajeno queda registrado', () => {
-  it('la verificación desde plataforma escribe en la auditoría', () => {
-    /*
-     * Poder hacerlo todo y que no quede rastro es lo peligroso. Poder hacerlo
-     * todo y que quede, es administrar.
-     */
-    const bloque = codigo.slice(codigo.indexOf('setVerificationAnywhere'));
-    assert.match(bloque, /auditLog/);
-    assert.match(bloque, /plataforma\./);
+  /*
+   * Poder hacerlo todo y que no quede rastro es lo peligroso. Poder hacerlo
+   * todo y que quede, es administrar.
+   */
+  it('ninguna operación de escritura se salta la bitácora', () => {
+    const mudas = exportadas()
+      .filter((fn) => !SOLO_LEEN.includes(fn.nombre))
+      .filter((fn) => !fn.cuerpo.includes('registrarEnEspacio'))
+      .map((fn) => fn.nombre);
+
+    assert.deepEqual(
+      mudas,
+      [],
+      'estas operaciones cambian algo en un espacio ajeno sin dejar constancia: ' +
+        mudas.join(', ') +
+        '. Si de verdad solo leen, añádelas a SOLO_LEEN y que se vea.',
+    );
   });
 
-  it('la auditoría se escribe en el espacio afectado, no en el propio', () => {
-    // Que quien administra ese espacio lo vea en su propia bitácora.
-    const bloque = codigo.slice(codigo.indexOf('setVerificationAnywhere'));
-    assert.match(bloque, /tenantId,\s*\n\s*userId: admin\.ctx\.userId/);
+  it('la bitácora se escribe en el espacio afectado, no en el propio', () => {
+    // Que quien administra ese espacio lo vea en su propia bitácora, y no se
+    // entere por otro lado —o no se entere—.
+    const helper = codigo.slice(codigo.indexOf('async function registrarEnEspacio'));
+
+    assert.match(helper, /auditLog/);
+    assert.match(helper, /tenantId,\s*\n\s*userId: adminUserId/);
+  });
+
+  it('la acción queda marcada como venida de plataforma', () => {
+    const helper = codigo.slice(codigo.indexOf('async function registrarEnEspacio'));
+    assert.match(helper, /porPlataforma: true/);
   });
 });
 
 describe('toda función de plataforma comprueba que quien llama sea superadmin', () => {
   it('ninguna se salta `assertSuperadmin`', () => {
-    const exportadas = [...codigo.matchAll(/export async function (\w+)\(/g)].map(
-      (match) => match[1],
-    );
+    const funciones = exportadas();
+    assert.ok(funciones.length > 0, 'no se encontró ninguna función exportada');
 
-    assert.ok(exportadas.length > 0, 'no se encontró ninguna función exportada');
-
-    const sinGuardia = exportadas.filter((nombre) => {
-      const inicio = codigo.indexOf(`export async function ${nombre}(`);
-      const siguiente = codigo.indexOf('export async function ', inicio + 10);
-      const cuerpo = codigo.slice(
-        inicio,
-        siguiente === -1 ? codigo.length : siguiente,
-      );
-      return !cuerpo.includes('assertSuperadmin');
-    });
+    const sinGuardia = funciones
+      .filter((fn) => !fn.cuerpo.includes('assertSuperadmin'))
+      .map((fn) => fn.nombre);
 
     assert.deepEqual(
       sinGuardia,

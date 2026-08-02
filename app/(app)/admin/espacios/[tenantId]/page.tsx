@@ -38,6 +38,13 @@ export default async function EspacioPage({
       tenantId={detail.space.id}
       name={detail.space.name}
       plan={detail.space.plan}
+      paidPlan={detail.paidPlan}
+      grant={{
+        plan: detail.grant.plan,
+        limits: detail.grant.limits,
+        note: detail.grant.note,
+        grantedAt: detail.grant.grantedAt?.toISOString() ?? null,
+      }}
       members={detail.members}
       professionals={detail.professionals.map((professional) => ({
         id: professional.id,

@@ -148,6 +148,131 @@ export function resolveLimits(
   };
 }
 
+// --- Concesiones de plataforma -----------------------------------------------
+
+/**
+ * Orden de los planes, de menos a más.
+ *
+ * Se declara aquí y no se deduce de `PLANS` por si algún día el orden del array
+ * deja de coincidir con el de generosidad.
+ */
+const PLAN_RANK: Record<Plan, number> = {
+  free: 0,
+  personal: 1,
+  organization: 2,
+};
+
+/**
+ * El plan que vale: el pagado o el concedido, el que sea mayor.
+ *
+ * **La concesión solo suma.** Si un espacio paga `organization` y alguien le
+ * concede `personal` por error, sigue teniendo `organization`. Esa regla no es
+ * una cortesía: es lo que hace que equivocarse en la pantalla de plataforma no
+ * pueda quitarle a nadie lo que está pagando.
+ *
+ * Para bajar de plan se cambia la suscripción en Stripe, que es donde vive el
+ * dinero. Para retirar una concesión basta con quitarla, y entonces el espacio
+ * vuelve exactamente a lo que paga.
+ */
+export function effectivePlan(paid: Plan, granted: Plan | null): Plan {
+  if (!granted) return paid;
+  return PLAN_RANK[granted] > PLAN_RANK[paid] ? granted : paid;
+}
+
+/**
+ * Aplica una concesión de límites sobre los del plan, **solo hacia arriba**.
+ *
+ * `null` es «sin límite», así que gana a cualquier número por grande que sea.
+ * Un `null` en el plan no lo baja ninguna concesión: ya es lo más generoso que
+ * existe.
+ *
+ * Misma razón que arriba: subir un límite puntual a un espacio es una operación
+ * corriente y conviene que sea fácil; bajárselo por debajo de lo que su plan
+ * promete no debería poder hacerse sin querer desde un formulario.
+ */
+export function grantLimits(
+  base: PlanLimits,
+  granted: Partial<PlanLimits> | null | undefined,
+): PlanLimits {
+  if (!granted) return base;
+
+  const mayor = (
+    actual: number | null,
+    concedido: number | null | undefined,
+  ): number | null => {
+    if (concedido === undefined) return actual;
+    if (actual === null || concedido === null) return null;
+    return Math.max(actual, concedido);
+  };
+
+  return {
+    mensajes: mayor(base.mensajes, granted.mensajes),
+    documentos: mayor(base.documentos, granted.documentos),
+    almacenamiento: mayor(base.almacenamiento, granted.almacenamiento),
+    equipo_de_apoyo: mayor(base.equipo_de_apoyo, granted.equipo_de_apoyo),
+    // `asientos` no admite `null`: siempre hay un número de personas.
+    asientos: Math.max(base.asientos, granted.asientos ?? base.asientos),
+  };
+}
+
+/**
+ * Cota superior de cada límite concedido.
+ *
+ * No están para apretar a nadie —son enormes a propósito— sino para que un
+ * dedazo en un formulario no acabe en la base. Un número absurdo guardado tal
+ * cual es difícil de ver desde la pantalla de alguien a quien de repente le
+ * pasa algo raro.
+ */
+const TECHO = {
+  mensajes: 1_000_000,
+  documentos: 100_000,
+  almacenamiento: 1024 * 1024 * 1024 * 1024, // 1 TB
+  equipo_de_apoyo: 10_000,
+  asientos: 10_000,
+} as const;
+
+/** Los que admiten «sin límite». `asientos` no: siempre hay un número. */
+const OPCIONALES = [
+  'mensajes',
+  'documentos',
+  'almacenamiento',
+  'equipo_de_apoyo',
+] as const;
+
+/**
+ * Deja una concesión en condiciones de guardarse.
+ *
+ * Descarta lo que no es un número, recorta a rangos razonables y devuelve
+ * `null` —no un objeto vacío— cuando no queda nada: retirar una concesión tiene
+ * que dejar la fila limpia de verdad, no con un `{}` que luego alguien lea como
+ * «hay algo concedido».
+ */
+export function sanitizeGrantedLimits(
+  limits: Partial<PlanLimits> | null | undefined,
+): Partial<PlanLimits> | null {
+  if (!limits) return null;
+
+  const salida: Partial<PlanLimits> = {};
+
+  const acotar = (valor: number, techo: number): number =>
+    Math.min(Math.max(Math.floor(valor), 0), techo);
+
+  for (const clave of OPCIONALES) {
+    const valor = limits[clave];
+    if (valor === undefined) continue;
+    if (valor === null) salida[clave] = null;
+    else if (Number.isFinite(valor)) salida[clave] = acotar(valor, TECHO[clave]);
+  }
+
+  if (typeof limits.asientos === 'number' && Number.isFinite(limits.asientos)) {
+    // Cero asientos dejaría un espacio en el que no cabe nadie, ni quien ya
+    // está dentro.
+    salida.asientos = Math.max(acotar(limits.asientos, TECHO.asientos), 1);
+  }
+
+  return Object.keys(salida).length === 0 ? null : salida;
+}
+
 /** El primer día del mes en curso, en UTC. Es la ventana de los contadores. */
 export function currentPeriodStart(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

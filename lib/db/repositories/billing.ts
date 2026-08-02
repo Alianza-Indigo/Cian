@@ -18,7 +18,12 @@ import {
   assertTenantContext,
   type TenantContext,
 } from '../../tenant/guard';
-import { currentPeriodStart, resolveLimits } from '../../billing/limits';
+import {
+  currentPeriodStart,
+  effectivePlan,
+  grantLimits,
+  resolveLimits,
+} from '../../billing/limits';
 import {
   grantsAccess,
   type BillingCycle,
@@ -44,17 +49,68 @@ export async function getSubscription(
   return row ?? null;
 }
 
+/** Lo que se paga, sin contar concesiones de plataforma. */
+async function getPaidPlan(ctx: TenantContext): Promise<Plan> {
+  const subscription = await getSubscription(ctx);
+  if (!subscription) return 'free';
+  return grantsAccess(subscription.status) ? subscription.plan : 'free';
+}
+
+/** La concesión que la plataforma le haya hecho a este espacio, si la hay. */
+async function getPlatformGrant(ctx: TenantContext): Promise<{
+  plan: Plan | null;
+  limits: Partial<PlanLimits> | null;
+}> {
+  assertTenantContext(ctx, 'getPlatformGrant');
+
+  const [row] = await db
+    .select({ plan: tenants.platformPlan, limits: tenants.platformLimits })
+    .from(tenants)
+    .where(eq(tenants.id, ctx.tenantId))
+    .limit(1);
+
+  return { plan: row?.plan ?? null, limits: row?.limits ?? null };
+}
+
 /**
  * El plan vigente de un tenant.
  *
  * Cae a `free` cuando no hay suscripción o cuando la que hay ya no da acceso.
  * Nadie se queda sin aplicación por no pagar: se queda con el plan gratuito,
  * que es un plan completo.
+ *
+ * Encima de eso puede haber una **concesión de plataforma**, que solo suma
+ * (ver `effectivePlan`). Así, un espacio al que se le abrió el plan sin cobrarle
+ * lo conserva aunque nunca aparezca en Stripe.
  */
 export async function getEffectivePlan(ctx: TenantContext): Promise<Plan> {
-  const subscription = await getSubscription(ctx);
-  if (!subscription) return 'free';
-  return grantsAccess(subscription.status) ? subscription.plan : 'free';
+  const [pagado, grant] = await Promise.all([
+    getPaidPlan(ctx),
+    getPlatformGrant(ctx),
+  ]);
+
+  return effectivePlan(pagado, grant.plan);
+}
+
+/**
+ * Plan y límites de **este** espacio, ya con la concesión aplicada.
+ *
+ * Es lo que debe usar cualquiera que vaya a decidir si algo cabe. `getPlanLimits`
+ * a secas devuelve los del plan en abstracto y se queda corto: no sabe que a
+ * este espacio en concreto se le subieron los asientos.
+ */
+export async function getTenantPlanLimits(
+  ctx: TenantContext,
+): Promise<{ plan: Plan; limits: PlanLimits }> {
+  const [pagado, grant] = await Promise.all([
+    getPaidPlan(ctx),
+    getPlatformGrant(ctx),
+  ]);
+
+  const plan = effectivePlan(pagado, grant.plan);
+  const base = await getPlanLimits(plan);
+
+  return { plan, limits: grantLimits(base, grant.limits) };
 }
 
 /**

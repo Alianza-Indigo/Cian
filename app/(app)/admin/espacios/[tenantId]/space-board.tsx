@@ -12,10 +12,20 @@ import {
   type Specialty,
   type VerificationStatus,
 } from '@/lib/consultorio/types';
-import { PLAN_LABELS, type Plan } from '@/lib/billing/types';
+import {
+  PLANS,
+  PLAN_LABELS,
+  type Plan,
+  type PlanLimits,
+} from '@/lib/billing/types';
 import { ROLE_LABELS } from '@/lib/tenant/roles';
-import type { MemberRole } from '@/lib/tenant/guard';
-import { verifyFromPlatformAction } from '@/lib/admin/platform-actions';
+import { MEMBER_ROLES, type MemberRole } from '@/lib/tenant/guard';
+import {
+  removeMemberFromPlatformAction,
+  setGrantFromPlatformAction,
+  setRoleFromPlatformAction,
+  verifyFromPlatformAction,
+} from '@/lib/admin/platform-actions';
 
 type Member = {
   userId: string;
@@ -44,9 +54,54 @@ type Appointment = {
   clientName: string | null;
 };
 
+type Grant = {
+  plan: Plan | null;
+  limits: Partial<PlanLimits> | null;
+  note: string | null;
+  grantedAt: string | null;
+};
+
 const selectClass =
   'rounded-lg border border-border bg-card px-3 text-sm text-foreground ' +
   'focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+const inputClass = selectClass;
+
+const MB = 1024 * 1024;
+
+/**
+ * Los límites concedibles, en las unidades en que se piensan.
+ *
+ * El almacenamiento se pide en megas y no en bytes a propósito: nadie concede
+ * «2147483648» de nada, y un cero de más en un campo de bytes es un error que
+ * no se ve al releerlo.
+ */
+const CAMPOS = [
+  { key: 'mensajes', label: 'Mensajes al mes', unidad: null },
+  { key: 'documentos', label: 'Documentos al mes', unidad: null },
+  { key: 'almacenamiento', label: 'Almacenamiento', unidad: 'MB' },
+  { key: 'equipo_de_apoyo', label: 'Personas en el equipo de apoyo', unidad: null },
+] as const;
+
+/** Lo guardado, en la unidad del formulario. */
+function valorInicial(
+  limits: Partial<PlanLimits> | null,
+  key: (typeof CAMPOS)[number]['key'],
+): string {
+  const valor = limits?.[key];
+  if (valor === undefined) return '';
+  if (valor === null) return 'sin-limite';
+  return key === 'almacenamiento' ? String(Math.round(valor / MB)) : String(valor);
+}
+
+/** De lo que se escribió en el campo de megas a lo que se guarda. */
+function enBytes(valor: FormDataEntryValue | null): string {
+  const texto = String(valor ?? '').trim();
+  if (texto === '' || texto === 'sin-limite') return texto;
+
+  const megas = Number(texto);
+  return Number.isFinite(megas) ? String(Math.round(megas * MB)) : texto;
+}
 
 const fechaHora = new Intl.DateTimeFormat('es-MX', {
   day: 'numeric',
@@ -70,6 +125,8 @@ export function SpaceBoard({
   tenantId,
   name,
   plan,
+  paidPlan,
+  grant,
   members,
   professionals,
   appointments,
@@ -77,6 +134,8 @@ export function SpaceBoard({
   tenantId: string;
   name: string;
   plan: Plan;
+  paidPlan: Plan;
+  grant: Grant;
   members: Member[];
   professionals: Professional[];
   appointments: Appointment[];
@@ -108,10 +167,155 @@ export function SpaceBoard({
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{name}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Plan {PLAN_LABELS[plan]} · {members.length}{' '}
-          {members.length === 1 ? 'persona' : 'personas'}
+          Plan {PLAN_LABELS[plan]}
+          {grant.plan && plan !== paidPlan
+            ? ` (concedido; paga ${PLAN_LABELS[paidPlan]})`
+            : ''}{' '}
+          · {members.length} {members.length === 1 ? 'persona' : 'personas'}
         </p>
       </div>
+
+      {/* --- Plan y límites concedidos ---------------------------------------- */}
+      <section aria-labelledby="concesion">
+        <h3 id="concesion" className="text-lg font-semibold tracking-tight">
+          Plan y límites de este espacio
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Puedes abrirle el plan a una asociación que no paga, o subirle un
+          límite puntual, sin montar un cobro. No pasa por Stripe y no caduca.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Lo que concedas <strong>solo suma</strong>: se aplica cuando es más
+          generoso que lo que este espacio ya paga ({PLAN_LABELS[paidPlan]}),
+          nunca cuando es menor. Así, equivocarte aquí no puede quitarle a nadie
+          lo que está pagando. Para bajar de plan se cambia la suscripción en
+          Stripe; para retirar lo concedido, vacía los campos y guarda.
+        </p>
+
+        <Card className="mt-3">
+          <form
+            action={(formData) =>
+              run(() =>
+                setGrantFromPlatformAction({
+                  tenantId,
+                  plan: formData.get('plan'),
+                  note: formData.get('note'),
+                  mensajes: formData.get('mensajes'),
+                  documentos: formData.get('documentos'),
+                  // Se pide en megas y se guarda en bytes.
+                  almacenamiento: enBytes(formData.get('almacenamiento')),
+                  equipo_de_apoyo: formData.get('equipo_de_apoyo'),
+                  asientos: formData.get('asientos'),
+                }),
+              )
+            }
+            style={{ display: 'grid', gap: 'var(--cian-gap)' }}
+          >
+            <label className="block text-sm">
+              <span className="font-medium">Plan concedido</span>
+              <select
+                name="plan"
+                defaultValue={grant.plan ?? ''}
+                disabled={isPending}
+                className={`${selectClass} mt-1 block w-full`}
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              >
+                <option value="">Ninguno — lo que pague</option>
+                {PLANS.map((value) => (
+                  <option key={value} value={value}>
+                    {PLAN_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <fieldset
+              className="grid gap-3 sm:grid-cols-2"
+              style={{ border: 0, padding: 0, margin: 0 }}
+            >
+              <legend className="text-sm font-medium">
+                Límites puntuales
+                <span className="ml-2 font-normal text-muted-foreground">
+                  vacío = el del plan
+                </span>
+              </legend>
+
+              {CAMPOS.map((campo) => (
+                <label key={campo.key} className="block text-sm">
+                  <span>
+                    {campo.label}
+                    {campo.unidad ? ` (${campo.unidad})` : ''}
+                  </span>
+                  <input
+                    name={campo.key}
+                    type="text"
+                    inputMode="numeric"
+                    defaultValue={valorInicial(grant.limits, campo.key)}
+                    placeholder="sin-limite para quitar el tope"
+                    disabled={isPending}
+                    className={`${inputClass} mt-1 block w-full`}
+                    style={{ minHeight: 'var(--cian-control-height)' }}
+                  />
+                </label>
+              ))}
+
+              <label className="block text-sm">
+                <span>Asientos</span>
+                <input
+                  name="asientos"
+                  type="text"
+                  inputMode="numeric"
+                  defaultValue={
+                    grant.limits?.asientos === undefined
+                      ? ''
+                      : String(grant.limits.asientos)
+                  }
+                  disabled={isPending}
+                  className={`${inputClass} mt-1 block w-full`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                />
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Cuántas personas caben. No admite «sin límite».
+                </span>
+              </label>
+            </fieldset>
+
+            <label className="block text-sm">
+              <span className="font-medium">Por qué</span>
+              <input
+                name="note"
+                type="text"
+                maxLength={500}
+                defaultValue={grant.note ?? ''}
+                placeholder="Convenio con la asociación, ciclo 2026"
+                disabled={isPending}
+                className={`${inputClass} mt-1 block w-full`}
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Lo lee quien venga dentro de un año a preguntarse por qué este
+                espacio no paga.
+              </span>
+            </label>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={isPending}
+                className="inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                style={{ minHeight: 'var(--cian-control-height)' }}
+              >
+                Guardar concesión
+              </button>
+              {grant.grantedAt ? (
+                <span className="text-xs text-muted-foreground">
+                  Concedido el {fechaHora.format(new Date(grant.grantedAt))}
+                </span>
+              ) : null}
+            </div>
+          </form>
+        </Card>
+      </section>
 
       {/* --- Profesionales ---------------------------------------------------- */}
       <section aria-labelledby="profesionales">
@@ -210,26 +414,84 @@ export function SpaceBoard({
         <h3 id="miembros" className="text-lg font-semibold tracking-tight">
           Quién está dentro
         </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Puedes cambiar roles y retirar a alguien aunque este espacio se haya
+          quedado sin nadie que administre. Un espacio nunca se queda sin
+          propietaria: si es la única, hay que nombrar a otra antes.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Retirar a alguien le quita el acceso a lo compartido de este espacio.{' '}
+          <strong>Lo suyo no se borra</strong>: sus conversaciones, documentos y
+          bitácoras siguen donde estaban, y desde aquí no se ven.
+        </p>
 
         <Card className="mt-3">
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {members.map((member) => (
               <li
                 key={member.userId}
-                className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 text-sm"
               >
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   {member.name ?? member.email ?? 'Sin nombre'}
                   {member.name && member.email ? (
                     <span className="ml-2 text-xs text-muted-foreground">
                       {member.email}
                     </span>
                   ) : null}
+                  {member.status !== 'active' ? (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {member.status}
+                    </span>
+                  ) : null}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  {ROLE_LABELS[member.role]}
-                  {member.status !== 'active' ? ` · ${member.status}` : ''}
-                </span>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    aria-label={`Rol de ${member.name ?? member.email ?? 'esta persona'}`}
+                    value={member.role}
+                    disabled={isPending}
+                    onChange={(event) =>
+                      run(() =>
+                        setRoleFromPlatformAction({
+                          tenantId,
+                          userId: member.userId,
+                          role: event.target.value,
+                        }),
+                      )
+                    }
+                    className={selectClass}
+                    style={{ minHeight: 'var(--cian-control-height)' }}
+                  >
+                    {MEMBER_ROLES.map((value) => (
+                      <option key={value} value={value}>
+                        {ROLE_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      // Sacar a alguien de un espacio no se deshace con
+                      // ctrl+z: se vuelve a invitar y hay que aceptar otra vez.
+                      const quien = member.name ?? member.email ?? 'esta persona';
+                      if (!confirm(`¿Retirar a ${quien} de ${name}?`)) return;
+
+                      run(() =>
+                        removeMemberFromPlatformAction({
+                          tenantId,
+                          userId: member.userId,
+                        }),
+                      );
+                    }}
+                    className="inline-flex items-center rounded-lg border border-border px-3 text-sm hover:bg-muted focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                    style={{ minHeight: 'var(--cian-control-height)' }}
+                  >
+                    Retirar
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

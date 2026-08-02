@@ -11,7 +11,7 @@ import {
   type MemberRole,
   type TenantContext,
 } from '../../tenant/guard';
-import { getEffectivePlan, getPlanLimits } from './billing';
+import { getTenantPlanLimits } from './billing';
 
 /** Días que vive una invitación sin aceptar. */
 export const INVITE_TTL_DAYS = 14;
@@ -63,8 +63,9 @@ export type SeatCheck =
  * aceptar la cuarta, dejando a alguien fuera después de haberle escrito.
  */
 export async function checkSeats(ctx: TenantContext): Promise<SeatCheck> {
-  const plan = await getEffectivePlan(ctx);
-  const limits = await getPlanLimits(plan);
+  // Con la concesión aplicada: subirle los asientos a una escuela desde la
+  // administración de plataforma tiene que notarse justo aquí.
+  const { limits } = await getTenantPlanLimits(ctx);
 
   const [members, pending] = await Promise.all([
     countActiveMembers(ctx),

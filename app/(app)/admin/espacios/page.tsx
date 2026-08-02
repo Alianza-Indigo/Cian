@@ -41,7 +41,8 @@ export default async function AdminEspaciosPage() {
         <p className="text-sm text-muted-foreground">
           {spaces.length} {spaces.length === 1 ? 'espacio' : 'espacios'} en la
           plataforma. Desde aquí puedes entrar a cualquiera y administrarlo:
-          miembros, roles, profesionales y verificaciones.
+          miembros, roles, profesionales, verificaciones, y concederle plan o
+          límites sin pasar por Stripe.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Lo que se habla en una consulta o con CIAN no se ve desde aquí, ni
@@ -74,7 +75,11 @@ export default async function AdminEspaciosPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                    <span>{PLAN_LABELS[space.plan]}</span>
+                    <span>
+                      {PLAN_LABELS[space.plan]}
+                      {/* Que se vea de un vistazo cuáles no pagan. */}
+                      {space.granted ? ' · concedido' : ''}
+                    </span>
                     <span className="tabular-nums">
                       {space.members}{' '}
                       {space.members === 1 ? 'persona' : 'personas'}
