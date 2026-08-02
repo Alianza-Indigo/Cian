@@ -11,6 +11,7 @@ import {
 } from '../schema/team';
 import { users } from '../schema/auth';
 import { assertTenantContext, type TenantContext } from '../../tenant/guard';
+import { ownsResource } from './ownership';
 import {
   INVITE_TOKEN_BYTES,
   INVITE_TTL_DAYS,
@@ -289,6 +290,18 @@ export async function shareResource(
   if (!member) throw new Error('Ese contacto no está en tu equipo de apoyo.');
   if (member.status === 'revocado') {
     throw new Error('A esa persona se le retiró el acceso. Invítala de nuevo primero.');
+  }
+
+  /*
+   * Solo se comparte lo propio.
+   *
+   * Antes bastaba con el tenant, y bastaba de verdad: cada persona estaba sola
+   * en su espacio. Desde que se puede invitar gente a un espacio, comprobar
+   * solo el tenant dejaría que un miembro compartiera el plan de otro con un
+   * contacto suyo de fuera.
+   */
+  if (!(await ownsResource(ctx, input.resourceType, input.resourceId))) {
+    throw new Error('Solo puedes compartir lo que es tuyo.');
   }
 
   const [row] = await db

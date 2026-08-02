@@ -242,7 +242,13 @@ import {
   setSessionTaskStatus,
   setVerificationStatus,
   upsertProfessionalProfile,
+  shareInSession,
+  listSessionShares,
+  revokeSessionShare,
+  addLicenseDoc,
+  removeLicenseDoc,
 } from '../lib/db/repositories/consultorio';
+import { ownsResource } from '../lib/db/repositories/ownership';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -826,6 +832,30 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
       'saveWhiteboard',
       (ctx) => saveWhiteboard(ctx as TenantContext, CONV, { strokes: [] }),
     ],
+    [
+      'shareInSession',
+      (ctx) =>
+        shareInSession(ctx as TenantContext, CONV, {
+          resourceType: 'plan',
+          resourceId: CONV,
+          resourceTitle: 'Un plan',
+        }),
+    ],
+    ['listSessionShares', (ctx) => listSessionShares(ctx as TenantContext, CONV)],
+    [
+      'revokeSessionShare',
+      (ctx) => revokeSessionShare(ctx as TenantContext, CONV),
+    ],
+    [
+      'addLicenseDoc',
+      (ctx) =>
+        addLicenseDoc(ctx as TenantContext, {
+          filename: 'cedula.pdf',
+          url: `/api/adjuntos/${CONV}`,
+        }),
+    ],
+    ['removeLicenseDoc', (ctx) => removeLicenseDoc(ctx as TenantContext, 'x')],
+    ['ownsResource', (ctx) => ownsResource(ctx as TenantContext, 'plan', CONV)],
     [
       'setAppointmentMeetingUrl',
       (ctx) =>

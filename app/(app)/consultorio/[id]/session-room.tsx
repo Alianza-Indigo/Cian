@@ -7,6 +7,7 @@ import {
   Eraser,
   Lock,
   Send,
+  Share2,
   Sparkles,
   Trash2,
   Video,
@@ -26,13 +27,19 @@ import {
 } from '@/lib/consultorio/types';
 import { RECORDING_NOTICE } from '@/lib/consultorio/meeting';
 import {
+  SHAREABLE_TYPE_LABELS,
+  type ShareableType,
+} from '@/lib/team/types';
+import {
   addSessionNoteAction,
   assignSessionTaskAction,
   deleteSessionNoteAction,
   draftSessionSummaryAction,
   endSessionAction,
   publishSessionSummaryAction,
+  revokeSessionShareAction,
   saveSessionSummaryAction,
+  shareInSessionAction,
   saveWhiteboardAction,
   setRecordingConsentAction,
   setSessionTaskStatusAction,
@@ -54,6 +61,21 @@ type Task = {
   isMine: boolean;
 };
 
+/** Algo que una parte enseñó a la otra dentro de esta sesión. */
+type Share = {
+  id: string;
+  resourceType: ShareableType;
+  resourceTitle: string;
+  isMine: boolean;
+};
+
+/** Algo propio que se puede ofrecer. Solo lo de quien mira. */
+type Shareable = {
+  type: ShareableType;
+  id: string;
+  title: string;
+};
+
 type Props = {
   appointmentId: string;
   sessionId: string;
@@ -68,6 +90,8 @@ type Props = {
   tasks: Task[];
   summary: { content: string; published: boolean } | null;
   whiteboard: WhiteboardState;
+  shares: Share[];
+  shareable: Shareable[];
   endedAt: string | null;
 };
 
@@ -237,6 +261,7 @@ export function SessionRoom(props: Props) {
   );
   const [summaryText, setSummaryText] = useState(props.summary?.content ?? '');
   const [taskTitle, setTaskTitle] = useState('');
+  const [picked, setPicked] = useState('');
   const [videoState, setVideoState] = useState<string | null>(null);
 
   const isProfessional = props.role === 'profesional';
@@ -490,6 +515,120 @@ export function SessionRoom(props: Props) {
             <Send aria-hidden="true" />
             Guardar nota
           </Button>
+        </Card>
+      </section>
+
+      {/* --- Compartido en la sesión ------------------------------------------ */}
+      <section aria-labelledby="compartido-sesion">
+        <h2
+          id="compartido-sesion"
+          className="text-lg font-semibold tracking-tight"
+        >
+          Lo que se enseña en esta sesión
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Solo dentro de esta consulta y solo de lectura. Retirarlo aquí no toca
+          nada de lo que hayas compartido en otra parte.
+        </p>
+
+        <Card className="mt-3">
+          {props.shares.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Todavía no se ha enseñado nada.
+            </p>
+          ) : (
+            <ul style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
+              {props.shares.map((share) => (
+                <li
+                  key={share.id}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {share.resourceTitle}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {SHAREABLE_TYPE_LABELS[share.resourceType]}
+                    </p>
+                  </div>
+
+                  {/* Solo lo retira quien lo enseñó. */}
+                  {share.isMine ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Dejar de enseñar ${share.resourceTitle}`}
+                      disabled={isPending}
+                      onClick={() =>
+                        run(() =>
+                          revokeSessionShareAction(props.sessionId, share.id),
+                        )
+                      }
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {props.shareable.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <label htmlFor="compartir-recurso" className="text-sm font-medium">
+                  Enseñar algo tuyo
+                </label>
+                <select
+                  id="compartir-recurso"
+                  value={picked}
+                  onChange={(event) => setPicked(event.target.value)}
+                  className={`mt-1 ${inputClass}`}
+                  style={{ minHeight: 'var(--cian-control-height)' }}
+                >
+                  <option value="">Elige…</option>
+                  {props.shareable.map((item) => (
+                    <option
+                      key={`${item.type}:${item.id}`}
+                      value={`${item.type}:${item.id}`}
+                    >
+                      {SHAREABLE_TYPE_LABELS[item.type]} · {item.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <Button
+                type="button"
+                disabled={isPending || picked === ''}
+                onClick={() => {
+                  const item = props.shareable.find(
+                    (candidate) => `${candidate.type}:${candidate.id}` === picked,
+                  );
+                  if (!item) return;
+
+                  run(async () => {
+                    const result = await shareInSessionAction({
+                      sessionId: props.sessionId,
+                      resourceType: item.type,
+                      resourceId: item.id,
+                      resourceTitle: item.title,
+                    });
+                    if (result.ok) setPicked('');
+                    return result;
+                  });
+                }}
+              >
+                <Share2 aria-hidden="true" />
+                Enseñar
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">
+              No tienes planes, rutinas ni documentos que enseñar todavía.
+            </p>
+          )}
         </Card>
       </section>
 

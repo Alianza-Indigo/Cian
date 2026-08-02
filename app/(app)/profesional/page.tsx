@@ -42,6 +42,7 @@ export default async function ProfesionalPage() {
                 id: profile.id,
                 specialties: profile.specialties,
                 licenseNumber: profile.licenseNumber,
+                licenseDocs: profile.licenseDocs,
                 bio: profile.bio,
                 defaultMeetingUrl: profile.defaultMeetingUrl,
                 verificationStatus: profile.verificationStatus,

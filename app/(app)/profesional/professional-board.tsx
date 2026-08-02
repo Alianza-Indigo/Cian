@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BadgeCheck, Plus, Save, Trash2 } from 'lucide-react';
+import { BadgeCheck, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleField } from '@/components/ui/toggle-field';
@@ -23,15 +23,19 @@ import {
 import { WEEKDAY_NAMES } from '@/lib/notifications/types';
 import {
   addAvailabilityAction,
+  addLicenseDocAction,
   deleteAvailabilityAction,
+  removeLicenseDocAction,
   saveProfessionalProfileAction,
   setVerificationStatusAction,
 } from '@/lib/consultorio/actions';
+import { uploadAttachments } from '@/lib/attachments/client';
 
 type Profile = {
   id: string;
   specialties: Specialty[];
   licenseNumber: string | null;
+  licenseDocs: Array<{ filename: string; blobUrl: string; uploadedAt: string }>;
   bio: string | null;
   defaultMeetingUrl: string | null;
   verificationStatus: VerificationStatus;
@@ -85,6 +89,36 @@ export function ProfessionalBoard({
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [meetingUrl, setMeetingUrl] = useState(profile?.defaultMeetingUrl ?? '');
   const [accepted, setAccepted] = useState(Boolean(profile?.termsAcceptedAt));
+
+  const [uploading, setUploading] = useState(false);
+
+  /**
+   * Sube el documento y lo pega al perfil.
+   *
+   * Pasa por `/api/adjuntos`, el mismo camino que los adjuntos del chat: queda
+   * en almacenamiento privado tras una ruta que comprueba el tenant. La cédula
+   * de alguien no puede acabar en una URL que se pueda reenviar.
+   */
+  async function attachLicenseDoc(file: File) {
+    setUploading(true);
+    setStatus('Subiendo el documento…');
+
+    const upload = await uploadAttachments([file]);
+    setUploading(false);
+
+    if (!upload.ok) {
+      setStatus(upload.error);
+      return;
+    }
+
+    const attachment = upload.attachments[0];
+    if (!attachment) {
+      setStatus('No pudimos subir el documento.');
+      return;
+    }
+
+    run(() => addLicenseDocAction(attachment.filename, attachment.url));
+  }
 
   const [weekday, setWeekday] = useState(2);
   const [startTime, setStartTime] = useState('09:00');
@@ -266,6 +300,90 @@ export function ProfessionalBoard({
           ) : null}
         </Card>
       </section>
+
+      {/* --- Documentos de la cédula ------------------------------------------ */}
+      {profile ? (
+        <section aria-labelledby="documentos-cedula">
+          <h2
+            id="documentos-cedula"
+            className="text-lg font-semibold tracking-tight"
+          >
+            Documentos que respaldan tu cédula
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Quien administra el espacio los revisa antes de verificarte. Sin
+            ellos, verificar es creerle a un campo de texto.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Quedan en almacenamiento privado, detrás de una ruta que comprueba
+            quién los pide. No son públicos ni tienen enlace que se pueda
+            reenviar.
+          </p>
+
+          <Card className="mt-3">
+            {profile.licenseDocs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Todavía no has adjuntado ninguno.
+              </p>
+            ) : (
+              <ul style={{ display: 'grid', gap: 'var(--cian-gap)' }}>
+                {profile.licenseDocs.map((doc) => (
+                  <li
+                    key={doc.blobUrl}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <a
+                      href={doc.blobUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1 truncate text-sm underline underline-offset-4"
+                    >
+                      {doc.filename}
+                    </a>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Retirar ${doc.filename}`}
+                      disabled={isPending}
+                      onClick={() => run(() => removeLicenseDocAction(doc.blobUrl))}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <label
+              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-muted"
+              style={{ minHeight: 'var(--cian-control-height)' }}
+            >
+              <Upload aria-hidden="true" className="size-4" />
+              {uploading ? 'Subiendo…' : 'Adjuntar documento'}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="sr-only"
+                disabled={isPending || uploading}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void attachLicenseDoc(file);
+                }}
+              />
+            </label>
+
+            {profile.verificationStatus === 'verificado' ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Retirar un documento devuelve tu verificación a pendiente:
+                quitar la evidencia sobre la que alguien te verificó la deja sin
+                sostén.
+              </p>
+            ) : null}
+          </Card>
+        </section>
+      ) : null}
 
       {/* --- Disponibilidad --------------------------------------------------- */}
       {profile ? (

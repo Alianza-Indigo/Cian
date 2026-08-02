@@ -108,6 +108,14 @@ export function canOpenPractice(status: VerificationStatus): boolean {
 
 // --- Citas -------------------------------------------------------------------
 
+/**
+ * Cuántos documentos de cédula caben en un perfil.
+ *
+ * Con cédula, título y una constancia sobra. El tope existe para que la columna
+ * `jsonb` no crezca sin freno, no para poner difícil verificarse.
+ */
+export const MAX_LICENSE_DOCS = 5;
+
 export const APPOINTMENT_STATUSES = [
   'solicitada',
   'confirmada',

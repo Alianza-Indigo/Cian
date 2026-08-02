@@ -28,6 +28,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants';
 import { users } from './auth';
+import { shareableTypeEnum } from './team';
 import {
   APPOINTMENT_STATUSES,
   NOTE_VISIBILITIES,
@@ -321,6 +322,64 @@ export const sessionTasks = pgTable(
   ],
 );
 
+/**
+ * Recursos que una parte enseña a la otra **dentro de una sesión**.
+ *
+ * Cierra el pendiente de compartir documentos, planes y rutinas en consulta.
+ *
+ * ## Por qué no se reutilizó `resource_shares` de la Fase 8
+ *
+ * Aquella tabla comparte con un `support_team_member`, que es un contacto de
+ * fuera identificado por su correo. El profesional de una consulta no es eso:
+ * es un miembro del mismo espacio, con su rol. Para reutilizarla habría que
+ * meter al profesional también en el equipo de apoyo de la persona, que es
+ * darle un acceso permanente y de otra naturaleza para resolver un problema de
+ * una hora.
+ *
+ * ## El alcance es la sesión, y por eso está aquí
+ *
+ * Compartir un plan en una consulta es enseñarlo en esa consulta. Se revoca
+ * solo con `revoked_at`, y quien lo compartió puede retirarlo sin que eso toque
+ * nada de lo que haya compartido en otra parte.
+ *
+ * **Siempre de lectura**, como en la Fase 8 y por la misma razón: nadie edita
+ * lo que no es suyo. No hay columna de permiso porque no hay decisión que
+ * tomar.
+ */
+export const sessionShares = pgTable(
+  'session_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => consultSessions.id, { onDelete: 'cascade' }),
+    sharedByUserId: text('shared_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    resourceType: shareableTypeEnum('resource_type').notNull(),
+    resourceId: uuid('resource_id').notNull(),
+    /** Copia del título: la otra parte ve algo aunque después se renombre. */
+    resourceTitle: text('resource_title').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    index('session_shares_tenant_id_idx').on(table.tenantId),
+    index('session_shares_session_idx').on(table.sessionId),
+    // Compartir dos veces lo mismo en la misma sesión renueva, no duplica.
+    uniqueIndex('session_shares_session_resource_uq').on(
+      table.sessionId,
+      table.resourceType,
+      table.resourceId,
+    ),
+  ],
+);
+
 export const whiteboardStates = pgTable(
   'whiteboard_states',
   {
@@ -350,3 +409,4 @@ export type SessionNoteRow = typeof sessionNotes.$inferSelect;
 export type SessionSummaryRow = typeof sessionSummaries.$inferSelect;
 export type SessionTaskRow = typeof sessionTasks.$inferSelect;
 export type WhiteboardStateRow = typeof whiteboardStates.$inferSelect;
+export type SessionShareRow = typeof sessionShares.$inferSelect;

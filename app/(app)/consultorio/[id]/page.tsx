@@ -7,9 +7,13 @@ import {
   getSessionSummary,
   getWhiteboard,
   listSessionNotes,
+  listSessionShares,
   listSessionTasks,
   meetingUrlForAppointment,
 } from '@/lib/db/repositories/consultorio';
+import { listPlans } from '@/lib/db/repositories/plans';
+import { listRoutines } from '@/lib/db/repositories/routines';
+import { listDocuments } from '@/lib/db/repositories/documents';
 import { canStartRecording, hasSigned } from '@/lib/consultorio/consent';
 import { SessionRoom } from './session-room';
 
@@ -34,15 +38,25 @@ export default async function SesionPage({
 
   const session = await ensureSession(ctx, id);
 
-  const [notes, tasks, summary, whiteboard, meetingUrl] = await Promise.all([
-    listSessionNotes(ctx, session.id),
-    listSessionTasks(ctx, session.id),
-    getSessionSummary(ctx, session.id),
-    getWhiteboard(ctx, session.id),
-    // Solo para saber si hay enlace. El enlace en sí no viaja en el HTML: se
-    // pide a la ruta, que comprueba la ventana horaria en ese instante.
-    meetingUrlForAppointment(ctx.tenantId, id),
-  ]);
+  const [notes, tasks, summary, whiteboard, meetingUrl, shares, plans, routines, documents] =
+    await Promise.all([
+      listSessionNotes(ctx, session.id),
+      listSessionTasks(ctx, session.id),
+      getSessionSummary(ctx, session.id),
+      getWhiteboard(ctx, session.id),
+      // Solo para saber si hay enlace. El enlace en sí no viaja en el HTML: se
+      // pide a la ruta, que comprueba la ventana horaria en ese instante.
+      meetingUrlForAppointment(ctx.tenantId, id),
+      listSessionShares(ctx, session.id),
+      /*
+       * Lo que esta persona puede ofrecer. Los tres listados filtran por
+       * `userId`, así que aquí solo sale lo suyo: la lista del selector no
+       * puede enseñar lo de la otra parte ni por error de pintado.
+       */
+      listPlans(ctx, 50),
+      listRoutines(ctx, 50),
+      listDocuments(ctx, 50),
+    ]);
 
   return (
     <SessionRoom
@@ -80,6 +94,29 @@ export default async function SesionPage({
           : null
       }
       whiteboard={whiteboard}
+      shares={shares.map((share) => ({
+        id: share.id,
+        resourceType: share.resourceType,
+        resourceTitle: share.resourceTitle,
+        isMine: share.sharedByUserId === ctx.userId,
+      }))}
+      shareable={[
+        ...plans.map((plan) => ({
+          type: 'plan' as const,
+          id: plan.id,
+          title: plan.title,
+        })),
+        ...routines.map((routine) => ({
+          type: 'rutina' as const,
+          id: routine.id,
+          title: routine.title,
+        })),
+        ...documents.map((doc) => ({
+          type: 'documento' as const,
+          id: doc.id,
+          title: doc.title,
+        })),
+      ]}
       endedAt={session.endedAt?.toISOString() ?? null}
     />
   );

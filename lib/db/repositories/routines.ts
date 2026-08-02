@@ -9,6 +9,7 @@ import {
   type RoutineStepRow,
 } from '../schema/routines';
 import { assertTenantContext, type TenantContext } from '../../tenant/guard';
+import { safeAttachmentPath } from '../../attachments/path';
 import {
   STEP_DURATION_MAX_SECONDS,
   STEP_DURATION_MIN_SECONDS,
@@ -38,20 +39,6 @@ export type CreateRoutineInput = {
   conversationId?: string | null;
   steps?: StepInput[];
 };
-
-/**
- * Solo se acepta una ruta a nuestro propio servidor de adjuntos.
- *
- * Cualquier otra cosa se descarta en silencio. Sin esto, escribir `image_url`
- * sería escribir un `<img src>` arbitrario, y una imagen remota en la pantalla
- * de una rutina le cuenta al servidor de quien la sirve cuándo la abre esta
- * persona, y desde dónde.
- */
-function safeAttachmentPath(value: string | null | undefined): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return /^\/api\/adjuntos\/[0-9a-f-]{36}$/i.test(trimmed) ? trimmed : null;
-}
 
 function clampDuration(seconds: number | null | undefined): number | null {
   if (seconds === null || seconds === undefined) return null;

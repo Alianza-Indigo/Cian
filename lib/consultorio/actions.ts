@@ -10,7 +10,11 @@ import {
   deleteAvailability,
   deleteSessionNote,
   endSession,
+  addLicenseDoc,
   publishSessionSummary,
+  removeLicenseDoc,
+  revokeSessionShare,
+  shareInSession,
   requestAppointment,
   saveSessionSummary,
   saveWhiteboard,
@@ -23,6 +27,7 @@ import {
 } from '../db/repositories/consultorio';
 import { recordAudit } from '../db/repositories/audit';
 import { generateSessionSummaryDraft } from './summary-draft';
+import { SHAREABLE_TYPES } from '../team/types';
 import {
   APPOINTMENT_STATUSES,
   NOTE_VISIBILITIES,
@@ -526,5 +531,130 @@ export async function setAppointmentMeetingUrlAction(
     return { ok: true, message: 'Enlace actualizado.' };
   } catch (error) {
     return fail(error, 'No pudimos guardar el enlace.');
+  }
+}
+
+// --- Compartir en sesión -----------------------------------------------------
+
+const shareSchema = z.object({
+  sessionId: z.uuid(),
+  resourceType: z.enum(SHAREABLE_TYPES),
+  resourceId: z.uuid(),
+  resourceTitle: z.string().min(1).max(300),
+});
+
+/**
+ * Enseña un recurso propio a la otra parte, solo dentro de esta sesión.
+ *
+ * Siempre de lectura. El repositorio comprueba que el recurso sea de quien lo
+ * comparte: dentro de un espacio con varias personas, «está en mi tenant» dejó
+ * de significar «es mío».
+ */
+export async function shareInSessionAction(
+  input: unknown,
+): Promise<ConsultorioActionResult> {
+  const parsed = shareSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: 'No pudimos identificar qué compartir.' };
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    const share = await shareInSession(ctx, parsed.data.sessionId, parsed.data);
+
+    await recordAudit(ctx, {
+      action: 'consultorio.share',
+      entity: share.resourceType,
+      entityId: share.resourceId,
+      metadata: { sessionId: parsed.data.sessionId },
+    });
+
+    revalidatePath(`/consultorio/${parsed.data.sessionId}`);
+    return { ok: true, message: 'Compartido en esta sesión.' };
+  } catch (error) {
+    return fail(error, 'No pudimos compartirlo.');
+  }
+}
+
+export async function revokeSessionShareAction(
+  sessionId: string,
+  shareId: string,
+): Promise<ConsultorioActionResult> {
+  if (!idSchema.safeParse(sessionId).success) {
+    return { ok: false, error: 'Sesión no válida.' };
+  }
+  if (!idSchema.safeParse(shareId).success) {
+    return { ok: false, error: 'Recurso no válido.' };
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    await revokeSessionShare(ctx, shareId);
+
+    await recordAudit(ctx, {
+      action: 'consultorio.share_revoke',
+      entity: 'session_share',
+      entityId: shareId,
+    });
+
+    revalidatePath(`/consultorio/${sessionId}`);
+    return { ok: true, message: 'Ya no se ve en esta sesión.' };
+  } catch (error) {
+    return fail(error, 'No pudimos retirarlo.');
+  }
+}
+
+// --- Documentos de cédula ----------------------------------------------------
+
+/**
+ * Adjunta un documento que respalde la cédula.
+ *
+ * La ruta la valida el repositorio: solo se admite `/api/adjuntos/<uuid>`, que
+ * es privada y comprueba el tenant. Un documento de identidad profesional no
+ * puede quedar detrás de una URL pública.
+ */
+export async function addLicenseDocAction(
+  filename: string,
+  url: string,
+): Promise<ConsultorioActionResult> {
+  try {
+    const ctx = await requireTenantContext();
+    await addLicenseDoc(ctx, { filename, url });
+
+    await recordAudit(ctx, {
+      action: 'consultorio.license_doc_add',
+      entity: 'professional',
+    });
+
+    revalidatePath('/profesional');
+    return { ok: true, message: 'Documento adjuntado.' };
+  } catch (error) {
+    return fail(error, 'No pudimos adjuntar el documento.');
+  }
+}
+
+export async function removeLicenseDocAction(
+  url: string,
+): Promise<ConsultorioActionResult> {
+  try {
+    const ctx = await requireTenantContext();
+    const row = await removeLicenseDoc(ctx, url);
+
+    await recordAudit(ctx, {
+      action: 'consultorio.license_doc_remove',
+      entity: 'professional',
+      entityId: row.id,
+    });
+
+    revalidatePath('/profesional');
+    return {
+      ok: true,
+      message:
+        row.verificationStatus === 'pendiente'
+          ? 'Documento retirado. Tu verificación vuelve a quedar pendiente.'
+          : 'Documento retirado.',
+    };
+  } catch (error) {
+    return fail(error, 'No pudimos retirar el documento.');
   }
 }

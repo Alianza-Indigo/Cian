@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../client';
 import {
   appointments,
@@ -6,6 +6,7 @@ import {
   consultSessions,
   professionals,
   sessionNotes,
+  sessionShares,
   sessionSummaries,
   sessionTasks,
   whiteboardStates,
@@ -14,10 +15,16 @@ import {
   type ProfessionalRow,
   type SessionNoteRow,
   type SessionRow,
+  type LicenseDoc,
+  type SessionShareRow,
   type SessionSummaryRow,
   type SessionTaskRow,
 } from '../schema/consultorio';
 import { users } from '../schema/auth';
+import { ownsResource } from './ownership';
+import { safeAttachmentPath } from '../../attachments/path';
+import type { ShareableType } from '../../team/types';
+import { MAX_LICENSE_DOCS } from '../../consultorio/types';
 import {
   assertRoleAtLeast,
   assertTenantContext,
@@ -154,6 +161,102 @@ export async function upsertProfessionalProfile(
     .returning();
 
   if (!row) throw new Error('No se pudo guardar el perfil profesional.');
+  return row;
+}
+
+/**
+ * Añade un documento de cédula al perfil.
+ *
+ * La columna `license_docs` existía desde el principio y no había forma de
+ * escribirla: se pedía el número de cédula y no se podía adjuntar nada que lo
+ * respaldara, con lo que verificar significaba creerle a un campo de texto.
+ *
+ * El archivo va por `/api/adjuntos`, el mismo camino que todo lo demás: queda
+ * en almacenamiento privado tras una ruta que comprueba el tenant. Un documento
+ * de identidad profesional no puede acabar en una URL pública.
+ *
+ * **No devuelve la verificación a pendiente.** Adjuntar evidencia de lo que ya
+ * se declaró no cambia lo declarado; lo que sí lo hace —cambiar el número o las
+ * especialidades— ya está cubierto en `upsertProfessionalProfile`. Penalizar a
+ * quien aporta más pruebas sería justo al revés.
+ */
+export async function addLicenseDoc(
+  ctx: TenantContext,
+  input: { filename: string; url: string },
+): Promise<ProfessionalRow> {
+  assertTenantContext(ctx, 'addLicenseDoc');
+
+  const url = safeAttachmentPath(input.url);
+  if (!url) throw new Error('Ese archivo no es válido.');
+
+  const existing = await getMyProfessionalProfile(ctx);
+  if (!existing) throw new Error('Primero guarda tu perfil profesional.');
+
+  if (existing.licenseDocs.length >= MAX_LICENSE_DOCS) {
+    throw new Error(
+      `Puedes adjuntar hasta ${MAX_LICENSE_DOCS} documentos. Retira alguno primero.`,
+    );
+  }
+
+  const docs: LicenseDoc[] = [
+    ...existing.licenseDocs,
+    {
+      filename: input.filename.trim().slice(0, 200) || 'Documento',
+      blobUrl: url,
+      uploadedAt: new Date().toISOString(),
+    },
+  ];
+
+  const [row] = await db
+    .update(professionals)
+    .set({ licenseDocs: docs })
+    .where(
+      and(
+        eq(professionals.tenantId, ctx.tenantId),
+        eq(professionals.userId, ctx.userId),
+      ),
+    )
+    .returning();
+
+  if (!row) throw new Error('No se pudo adjuntar el documento.');
+  return row;
+}
+
+/**
+ * Retira un documento del propio perfil.
+ *
+ * Esto **sí** devuelve la verificación a pendiente si estaba verificado: quitar
+ * la evidencia sobre la que alguien verificó deja esa verificación sin sostén.
+ */
+export async function removeLicenseDoc(
+  ctx: TenantContext,
+  blobUrl: string,
+): Promise<ProfessionalRow> {
+  assertTenantContext(ctx, 'removeLicenseDoc');
+
+  const existing = await getMyProfessionalProfile(ctx);
+  if (!existing) throw new Error('No encontramos tu perfil profesional.');
+
+  const docs = existing.licenseDocs.filter((doc) => doc.blobUrl !== blobUrl);
+  if (docs.length === existing.licenseDocs.length) return existing;
+
+  const [row] = await db
+    .update(professionals)
+    .set({
+      licenseDocs: docs,
+      ...(existing.verificationStatus === 'verificado'
+        ? { verificationStatus: 'pendiente' as const, verifiedAt: null }
+        : {}),
+    })
+    .where(
+      and(
+        eq(professionals.tenantId, ctx.tenantId),
+        eq(professionals.userId, ctx.userId),
+      ),
+    )
+    .returning();
+
+  if (!row) throw new Error('No se pudo retirar el documento.');
   return row;
 }
 
@@ -1017,6 +1120,111 @@ export async function setAppointmentMeetingUrl(
       and(
         eq(appointments.id, appointmentId),
         eq(appointments.tenantId, ctx.tenantId),
+      ),
+    );
+}
+
+// --- Compartir en sesión -----------------------------------------------------
+
+/**
+ * Enseña un recurso propio a la otra parte, dentro de esta sesión.
+ *
+ * Dos comprobaciones, y ninguna sobra:
+ *
+ * 1. Quien comparte tiene que ser participante de la sesión. Lo garantiza
+ *    `getSessionForParticipant`, que ya resuelve el rol.
+ * 2. El recurso tiene que ser **suyo**. Sin esto, un miembro del espacio podría
+ *    enseñar el plan de otro en su propia consulta.
+ */
+export async function shareInSession(
+  ctx: TenantContext,
+  sessionId: string,
+  input: {
+    resourceType: ShareableType;
+    resourceId: string;
+    resourceTitle: string;
+  },
+): Promise<SessionShareRow> {
+  const found = await getSessionForParticipant(ctx, sessionId);
+  if (!found) throw new Error('No encontramos esa sesión.');
+
+  if (!(await ownsResource(ctx, input.resourceType, input.resourceId))) {
+    throw new Error('Solo puedes compartir lo que es tuyo.');
+  }
+
+  const values = {
+    sharedByUserId: ctx.userId,
+    resourceTitle: input.resourceTitle.trim().slice(0, 300) || 'Sin título',
+    // Volver a compartir algo retirado lo reactiva, en vez de dejar una fila
+    // muerta que impide compartirlo otra vez.
+    revokedAt: null,
+  };
+
+  const [row] = await db
+    .insert(sessionShares)
+    .values({
+      tenantId: ctx.tenantId,
+      sessionId,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      ...values,
+    })
+    .onConflictDoUpdate({
+      target: [
+        sessionShares.sessionId,
+        sessionShares.resourceType,
+        sessionShares.resourceId,
+      ],
+      set: values,
+    })
+    .returning();
+
+  if (!row) throw new Error('No se pudo compartir.');
+  return row;
+}
+
+/** Lo compartido y vivo en esta sesión. Lo ven las dos partes. */
+export async function listSessionShares(
+  ctx: TenantContext,
+  sessionId: string,
+): Promise<SessionShareRow[]> {
+  const found = await getSessionForParticipant(ctx, sessionId);
+  if (!found) return [];
+
+  return db
+    .select()
+    .from(sessionShares)
+    .where(
+      and(
+        eq(sessionShares.tenantId, ctx.tenantId),
+        eq(sessionShares.sessionId, sessionId),
+        isNull(sessionShares.revokedAt),
+      ),
+    )
+    .orderBy(asc(sessionShares.createdAt));
+}
+
+/**
+ * Deja de enseñarlo. Solo quien lo compartió.
+ *
+ * No se borra la fila: queda `revoked_at`, para poder responder qué se enseñó
+ * en una consulta y cuándo se retiró. Un registro clínico que se puede borrar
+ * sin rastro no sirve para responder nada.
+ */
+export async function revokeSessionShare(
+  ctx: TenantContext,
+  shareId: string,
+): Promise<void> {
+  assertTenantContext(ctx, 'revokeSessionShare');
+
+  await db
+    .update(sessionShares)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(sessionShares.id, shareId),
+        eq(sessionShares.tenantId, ctx.tenantId),
+        eq(sessionShares.sharedByUserId, ctx.userId),
       ),
     );
 }
