@@ -52,16 +52,16 @@ export default async function AppLayout({
       tenantName={tenant.name}
       userName={session?.user?.name ?? 'Tu cuenta'}
       userEmail={session?.user?.email ?? ''}
-      navItems={
-        // El panel solo aparece para quien puede entrar. No es la protección
-        // —esa está en el layout de /admin y en cada acción— sino cortesía:
-        // un enlace que lleva a un 404 no le sirve a nadie.
+      navItems={NAV_ITEMS}
+      /*
+       * El panel solo se enseña a quien puede entrar. No es la protección —esa
+       * está en el layout de `/admin` y en cada acción del repositorio— sino
+       * cortesía: un enlace que lleva a un 404 no le sirve a nadie.
+       */
+      adminHref={
         hasRoleAtLeast(ctx, 'admin') || isSuperadminEmail(session?.user?.email)
-          ? [
-              ...NAV_ITEMS,
-              { href: '/admin', label: 'Administración', icon: 'admin' as const },
-            ]
-          : NAV_ITEMS
+          ? '/admin'
+          : null
       }
       conversations={conversations.map((conversation) => ({
         id: conversation.id,

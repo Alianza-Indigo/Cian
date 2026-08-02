@@ -85,6 +85,15 @@ type AppShellProps = {
   userName: string;
   userEmail: string;
   navItems: readonly NavItem[];
+  /**
+   * El panel de administración, si esta persona puede entrar.
+   *
+   * Va aparte de `navItems` a propósito: es de otra naturaleza —administrar la
+   * plataforma, no acompañar a nadie— y mezclado en la lista de secciones
+   * quedaba como decimoséptimo elemento, debajo de Accesibilidad, donde nadie
+   * lo encuentra.
+   */
+  adminHref?: string | null;
   conversations: ConversationSummary[];
   children: React.ReactNode;
 };
@@ -94,6 +103,7 @@ export function AppShell({
   userName,
   userEmail,
   navItems,
+  adminHref,
   conversations,
   children,
 }: AppShellProps) {
@@ -174,6 +184,23 @@ export function AppShell({
       </nav>
 
       <div className="border-t border-border pt-3">
+        {adminHref ? (
+          <Link
+            href={adminHref}
+            aria-current={pathname.startsWith(adminHref) ? 'page' : undefined}
+            className={cn(
+              'mb-3 flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+              pathname.startsWith(adminHref)
+                ? 'bg-primary-soft text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+            style={{ minHeight: 'var(--cian-control-height)' }}
+          >
+            <ShieldCheck aria-hidden="true" className="size-4 shrink-0" />
+            <span className="truncate">Administración</span>
+          </Link>
+        ) : null}
+
         <p className="truncate text-sm font-medium">{userName}</p>
         <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
         <form action={signOutAction} className="mt-3">

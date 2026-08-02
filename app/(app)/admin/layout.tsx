@@ -28,6 +28,7 @@ export default async function AdminLayout({
       ? [
           { href: '/admin/prompts', label: 'Prompts' },
           { href: '/admin/biblioteca', label: 'Biblioteca' },
+          { href: '/admin/planes', label: 'Planes' },
         ]
       : []),
   ];

@@ -193,6 +193,14 @@ pantalla marca qué recursos vienen de archivo. Lo limpio sería migrar los
 archivos a la base y quitar el indexado del build, pero eso es una decisión
 sobre de dónde viene el contenido de arranque y no tocaba tomarla aquí.
 
+### El panel estaba escondido
+
+Quedó como decimoséptimo elemento de la barra lateral, debajo de
+Accesibilidad. Existía y no se encontraba, que para el caso es lo mismo. Ahora
+tiene su propio sitio junto al bloque de cuenta, separado de las secciones de
+acompañamiento —que son de otra naturaleza— y solo aparece para quien puede
+entrar.
+
 ### Sin costo estimado en pesos
 
 El PRD lo pide entre las métricas. No está, a propósito: poner una cifra de
@@ -223,8 +231,10 @@ configuración, y la pantalla lo dice.
   al añadir a alguien al espacio**, porque no existe todavía una pantalla para
   añadir miembros a un tenant —las organizaciones con varias personas no tienen
   interfaz propia—. El límite está definido y sin aplicar.
-- **`plan_limits` no tiene pantalla.** La tabla y la acción existen y están
-  protegidas por rol `owner`; falta el formulario en `/admin`.
+- ~~`plan_limits` no tiene pantalla.~~ **Resuelto.** `/admin/planes`, solo para
+  superadmin. Un campo vacío significa «sin límite» y no cero, y el
+  almacenamiento se escribe en megabytes: pedir bytes en un formulario es pedir
+  errores de tres ceros.
 - **El panel no administra otros tenants.** Un superadmin ve datos globales
   —prompts, biblioteca— pero sigue viendo métricas y auditoría solo de su propio
   espacio. Administrar usuarios y organizaciones ajenas exigiría un camino que
