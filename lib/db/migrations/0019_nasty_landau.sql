@@ -1,0 +1,1 @@
+ALTER TABLE "appointments" ADD COLUMN "requested_by" text DEFAULT 'usuario' NOT NULL;

@@ -608,9 +608,20 @@ export async function setAppointmentStatus(
   const found = await getAppointmentForParticipant(ctx, appointmentId);
   if (!found) return null;
 
-  // Confirmar es del profesional; cancelar puede cualquiera de los dos.
-  if (status === 'confirmada' && found.role !== 'profesional') {
-    throw new Error('Solo el profesional confirma una cita.');
+  /*
+   * Confirma quien NO la pidió; cancelar puede cualquiera de los dos.
+   *
+   * Antes confirmar era siempre del profesional, porque solo se podía pedir
+   * desde el otro lado. Ahora el profesional también propone, y una cita que él
+   * mismo propone y él mismo confirma es una cita que nadie aceptó: aparecería
+   * en la agenda de alguien sin que esa persona haya dicho que sí.
+   */
+  if (status === 'confirmada' && found.role === found.appointment.requestedBy) {
+    throw new Error(
+      found.role === 'profesional'
+        ? 'La propusiste tú: tiene que confirmarla la persona a la que atiendes.'
+        : 'La pediste tú: tiene que confirmarla quien te atiende.',
+    );
   }
 
   const [row] = await db

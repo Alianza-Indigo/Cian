@@ -34,6 +34,8 @@ type Appointment = {
   scheduledAt: string;
   durationMinutes: number;
   role: 'profesional' | 'usuario';
+  /** Quién la pidió. Confirma el otro. */
+  requestedBy: string;
   otherName: string | null;
   reason: string | null;
 };
@@ -127,7 +129,11 @@ export function ConsultorioBoard({
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {appointment.durationMinutes} minutos ·{' '}
-                        {APPOINTMENT_STATUS_LABELS[appointment.status]}
+                        {appointment.status === 'solicitada' &&
+                        appointment.requestedBy === 'profesional' &&
+                        appointment.role === 'usuario'
+                          ? 'Te la proponen'
+                          : APPOINTMENT_STATUS_LABELS[appointment.status]}
                         {appointment.role === 'usuario' && appointment.otherName
                           ? ` · con ${appointment.otherName}`
                           : ''}
@@ -151,8 +157,14 @@ export function ConsultorioBoard({
                         </Link>
                       ) : null}
 
-                      {appointment.role === 'profesional' &&
-                      appointment.status === 'solicitada' ? (
+                      {/*
+                        * Confirma quien NO la pidió. Antes solo aparecía para
+                        * el profesional porque solo se podía pedir desde el
+                        * otro lado; ahora el profesional también propone, y
+                        * entonces le toca confirmar a la persona atendida.
+                        */}
+                      {appointment.status === 'solicitada' &&
+                      appointment.role !== appointment.requestedBy ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -168,7 +180,9 @@ export function ConsultorioBoard({
                           }
                         >
                           <Check aria-hidden="true" />
-                          Confirmar
+                          {appointment.requestedBy === 'profesional'
+                            ? 'Aceptar'
+                            : 'Confirmar'}
                         </Button>
                       ) : null}
 

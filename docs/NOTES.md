@@ -5,6 +5,73 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Consultorio — Espacio de trabajo del profesional
+
+Pedido en uso, y con una razón explícita: es la parte que puede monetizar la
+plataforma. Antes existía la **sala** de sesión, que estaba bien resuelta, pero
+no existía el **consultorio como lugar de trabajo**.
+
+Lo que había: la agenda del profesional salía en `/consultorio`, la misma
+pantalla donde un paciente reserva, así que quien atendía veía sus citas
+mezcladas con un listado de sus propios colegas para reservarles. No había lista
+de personas atendidas, ni recorrido entre sesiones, ni forma de proponer una
+cita desde el lado de quien acompaña.
+
+### La regla que gobierna `lib/db/repositories/practice.ts`
+
+**Un profesional ve de una persona únicamente lo que pasó por las sesiones entre
+los dos.** No sus planes, ni sus rutinas, ni su bitácora sensorial, ni la de
+crisis, ni sus conversaciones con CIAN.
+
+Lo que sí ve: las citas que compartieron, las notas de esas sesiones —las suyas
+propias y las marcadas como compartidas—, los acuerdos y los resúmenes que él
+mismo redactó. Una nota privada de **otro** profesional que hubiera atendido la
+misma sesión tampoco se ve: privada quiere decir privada, no «privada para el
+paciente».
+
+Si algún día hace falta que vea más, el camino es que la persona lo **comparta**
+—`session_shares` existe para eso— y no que una consulta de aquí se estire. Una
+consulta que se estira no deja rastro de la decisión; un recurso compartido sí,
+con quién y cuándo.
+
+Ninguna función acepta un `professionalId` desde fuera: siempre se resuelve el
+propio desde `ctx.userId`. Aceptarlo sería dejar que alguien pidiera la agenda
+de otro escribiendo su identificador.
+
+### La lista de pacientes sale de las citas
+
+No hay tabla de «pacientes». Alguien lo es porque le atendiste, y mantener una
+lista sincronizada con ese hecho sería una segunda verdad que puede dejar de
+coincidir con la primera. Cuentan solo las citas que llegaron a existir
+—confirmadas, terminadas o con falta—: una solicitud cancelada antes de ocurrir
+no convierte a nadie en paciente.
+
+### Proponer una cita, y quién confirma
+
+El profesional ahora propone citas, y eso obligó a cambiar una regla que estaba
+bien mientras solo se podía pedir desde un lado: **confirma quien no la pidió**.
+Antes confirmar era siempre del profesional; si eso se hubiera dejado igual, una
+cita propuesta por él y confirmada por él aparecería en la agenda de alguien sin
+que esa persona haya dicho que sí. La columna `requested_by` es lo que permite
+saberlo.
+
+**Solo se propone a quien ya se atiende.** Sin ese límite, cualquiera con perfil
+profesional podría meter citas en la agenda de cualquier miembro del espacio. La
+primera cita la sigue pidiendo la persona.
+
+### Lo que sigue sin existir
+
+- **No hay cobro por consulta.** Si la monetización pasa por ahí, hace falta
+  decidir si CIAN cobra al profesional por usar la herramienta —lo que ya hacen
+  los planes— o si intermedia el pago de cada sesión, que es otro producto y
+  otras obligaciones legales.
+- **No hay exportación del expediente.** Un profesional que se va no puede
+  llevarse lo suyo en un archivo.
+- **No hay ausencias ni bloqueos de agenda.** Se publican horarios recurrentes y
+  no hay forma de decir «esta semana no».
+
+---
+
 ## Transversal — El menú lo mezclaba todo
 
 Reportado en uso: «el menú lateral mezcla todo, el perfil para dar de alta a los

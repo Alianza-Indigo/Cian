@@ -166,6 +166,16 @@ export const appointments = pgTable(
     meetingProvider: text('meeting_provider').notNull().default('meet'),
     reason: text('reason'),
     /**
+     * Quién pidió la cita.
+     *
+     * Hasta ahora solo se podía pedir desde el lado de la persona atendida, así
+     * que confirmar era siempre del profesional. Con la agenda del profesional
+     * eso deja de valer: si la propone él, quien tiene que decir que sí es la
+     * otra parte. **Confirma quien no la pidió**, y esta columna es lo que
+     * permite saber quién es.
+     */
+    requestedBy: text('requested_by').notNull().default('usuario'),
+    /**
      * Cuándo se avisó por última vez de esta cita.
      *
      * Una sola columna para los dos avisos —la víspera y la mañana— porque el

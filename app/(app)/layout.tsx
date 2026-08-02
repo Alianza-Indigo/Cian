@@ -71,22 +71,38 @@ function navGroupsFor(options: {
         { href: '/consultorio', label: 'Consultorio', icon: 'consultorio' },
         { href: '/equipo', label: 'Equipo de apoyo', icon: 'equipo' },
         { href: '/compartido', label: 'Compartido conmigo', icon: 'compartido' },
-        /*
-         * Solo para quien puede atender. Un admin lo ve porque también puede
-         * ejercer: el rol es uno solo, así que quien lleva un espacio y además
-         * es profesional no puede tener los dos a la vez.
-         */
-        ...(options.canPractice
-          ? [
-              {
-                href: '/profesional',
-                label: 'Mi perfil profesional',
-                icon: 'profesional' as const,
-              },
-            ]
-          : []),
       ],
     },
+    /*
+     * El espacio de trabajo de quien atiende, en su propio bloque.
+     *
+     * Un bloque entero que aparece o desaparece se entiende mejor que un enlace
+     * escondido dentro de otro: quien atiende ve que tiene una zona suya, y
+     * quien no atiende no ve nada que le haga dudar de si le falta algo.
+     *
+     * Un admin lo ve porque también puede ejercer: el rol es uno solo, así que
+     * quien lleva un espacio y además es profesional no puede tener los dos.
+     */
+    ...(options.canPractice
+      ? [
+          {
+            label: 'Tu consulta',
+            items: [
+              { href: '/profesional', label: 'Agenda', icon: 'consultorio' as const },
+              {
+                href: '/profesional/personas',
+                label: 'Personas',
+                icon: 'equipo' as const,
+              },
+              {
+                href: '/profesional/perfil',
+                label: 'Mi perfil',
+                icon: 'profesional' as const,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       label: 'Tu cuenta',
       items: [

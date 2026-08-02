@@ -249,6 +249,13 @@ import {
   removeLicenseDoc,
 } from '../lib/db/repositories/consultorio';
 import { ownsResource } from '../lib/db/repositories/ownership';
+import {
+  clientDossier,
+  myAgenda,
+  myClients,
+  proposalsForMe,
+  proposeAppointment,
+} from '../lib/db/repositories/practice';
 
 const VALID: TenantContext = {
   tenantId: '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c',
@@ -856,6 +863,23 @@ const SCOPED_REPOSITORY_FUNCTIONS: Array<[string, (ctx: unknown) => Promise<unkn
     ],
     ['removeLicenseDoc', (ctx) => removeLicenseDoc(ctx as TenantContext, 'x')],
     ['ownsResource', (ctx) => ownsResource(ctx as TenantContext, 'plan', CONV)],
+    // --- Espacio de trabajo profesional --------------------------------------
+    [
+      'myAgenda',
+      (ctx) => myAgenda(ctx as TenantContext, new Date(0), new Date(1)),
+    ],
+    ['myClients', (ctx) => myClients(ctx as TenantContext)],
+    ['clientDossier', (ctx) => clientDossier(ctx as TenantContext, 'usuario-2')],
+    ['proposalsForMe', (ctx) => proposalsForMe(ctx as TenantContext)],
+    [
+      'proposeAppointment',
+      (ctx) =>
+        proposeAppointment(ctx as TenantContext, {
+          clientUserId: 'usuario-2',
+          scheduledAt: new Date(Date.now() + 86_400_000),
+          durationMinutes: 50,
+        }),
+    ],
     [
       'setAppointmentMeetingUrl',
       (ctx) =>

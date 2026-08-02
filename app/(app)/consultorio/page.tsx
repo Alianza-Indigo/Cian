@@ -75,6 +75,7 @@ export default async function ConsultorioPage() {
           scheduledAt: entry.appointment.scheduledAt.toISOString(),
           durationMinutes: entry.appointment.durationMinutes,
           role: entry.role,
+          requestedBy: entry.appointment.requestedBy,
           otherName: entry.otherName,
           reason: entry.appointment.reason,
         }))}
