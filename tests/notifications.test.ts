@@ -452,7 +452,7 @@ describe('cifrado de Web Push', () => {
 });
 
 describe('VAPID', () => {
-  const vapid = { ...generateVapidKeys(), subject: 'mailto:contacto@amecrec.org' };
+  const vapid = { ...generateVapidKeys(), subject: 'mailto:contacto@alianzaindigo.org' };
   const endpoint = 'https://fcm.googleapis.com/fcm/send/abc123';
   const header = vapidAuthorizationHeader(endpoint, vapid, 1_000_000);
 
@@ -486,7 +486,7 @@ describe('VAPID', () => {
     const payload = JSON.parse(fromBase64Url(token.split('.')[1] ?? '').toString());
 
     assert.equal(payload.aud, 'https://fcm.googleapis.com');
-    assert.equal(payload.sub, 'mailto:contacto@amecrec.org');
+    assert.equal(payload.sub, 'mailto:contacto@alianzaindigo.org');
   });
 
   it('la caducidad no pasa de las 24 horas que permite el RFC 8292', () => {

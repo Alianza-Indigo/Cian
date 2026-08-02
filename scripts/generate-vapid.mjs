@@ -15,7 +15,7 @@ ecdh.generateKeys();
 console.log('Pega esto en las variables de entorno del proyecto:\n');
 console.log(`VAPID_PUBLIC_KEY="${ecdh.getPublicKey().toString('base64url')}"`);
 console.log(`VAPID_PRIVATE_KEY="${ecdh.getPrivateKey().toString('base64url')}"`);
-console.log('VAPID_SUBJECT="mailto:contacto@amecrec.org"');
+console.log('VAPID_SUBJECT="mailto:contacto@alianzaindigo.org"');
 console.log(
   '\nGuardalas antes de cerrar la terminal: la clave privada no se puede recuperar.',
 );

@@ -427,10 +427,10 @@ describe('superadmin de plataforma', () => {
   });
 
   it('compara sin distinguir mayúsculas ni espacios', () => {
-    process.env.CIAN_SUPERADMIN_EMAILS = ' Contacto@Amecrec.org , otra@ejemplo.mx ';
+    process.env.CIAN_SUPERADMIN_EMAILS = ' Contacto@Alianzaindigo.org , otra@ejemplo.mx ';
 
-    assert.equal(isSuperadminEmail('contacto@amecrec.org'), true);
-    assert.equal(isSuperadminEmail('CONTACTO@AMECREC.ORG'), true);
+    assert.equal(isSuperadminEmail('contacto@alianzaindigo.org'), true);
+    assert.equal(isSuperadminEmail('CONTACTO@ALIANZAINDIGO.ORG'), true);
     assert.equal(isSuperadminEmail('otra@ejemplo.mx'), true);
     assert.equal(isSuperadminEmail('intruso@ejemplo.mx'), false);
 
@@ -439,7 +439,7 @@ describe('superadmin de plataforma', () => {
   });
 
   it('un correo vacío nunca es superadmin', () => {
-    process.env.CIAN_SUPERADMIN_EMAILS = 'contacto@amecrec.org';
+    process.env.CIAN_SUPERADMIN_EMAILS = 'contacto@alianzaindigo.org';
 
     assert.equal(isSuperadminEmail(null), false);
     assert.equal(isSuperadminEmail(undefined), false);
