@@ -1261,15 +1261,14 @@ store de Postgres.
   en una plataforma cuyo público navega con lector de pantalla no son
   cosmética.
 
-- **Sin caché de prompts en KV.** La regla 3.5 pide cachear en Vercel KV.
-  `getActivePrompt()` va directo a Postgres por ahora, porque `@vercel/kv` es
-  dependencia de la Fase 1. La firma de la función no cambia cuando se agregue.
+- ~~Sin caché de prompts en KV.~~ **Resuelto en la Fase 1.** `getPromptContent`
+  cachea en KV con 300 segundos de vida y cae a Postgres si KV no responde. La
+  nota se quedó aquí sin tachar y decía lo contrario de lo que hace el código.
 
-- **Selector de espacio de trabajo.** La infraestructura multi-tenant está
-  completa (cookie `cian_tenant`, resolución en middleware, verificación de
-  membresía), pero no hay interfaz para cambiar de espacio porque en Fase 0 cada
-  persona solo tiene el suyo. Cuando la Fase 8 traiga organizaciones con varios
-  miembros, hará falta el selector y una server action que fije la cookie.
+- ~~Selector de espacio de trabajo.~~ **Resuelto** al construir las membresías.
+  El selector aparece en la barra lateral solo cuando alguien pertenece a más de
+  un espacio —uno solo es ruido— y `switchTenantAction` comprueba la membresía
+  antes de escribir la cookie.
 
 - **`listMembershipsForUser` no recibe `TenantContext`.** Es la única excepción
   y es deliberada: sirve para *descubrir* a qué tenants pertenece alguien, antes
@@ -1308,9 +1307,17 @@ store de Postgres.
 
 ### Para la Fase 1
 
-- `user_preferences.detail_level` ya se guarda y se puede configurar; el prompt
-  del orquestador (`prompts/seed/orchestrator.system.md`) ya lo menciona. Solo
-  falta inyectarlo en el contexto del modelo.
+- **`user_preferences.detail_level` sigue sin llegar al modelo, y es el
+  pendiente más serio que queda fuera de la Fase 10.** Se guarda, se configura
+  desde Accesibilidad y el prompt del orquestador lo menciona, pero la única vía
+  por la que el modelo puede leerlo es llamando a la tool `getUserContext`. Con
+  Flash-Lite y más de cuarenta tools registradas, para una pregunta normal no la
+  llama.
+  El efecto es que quien puso «respuestas breves» —probablemente porque los
+  textos largos le abruman— sigue recibiendo respuestas largas. Es un ajuste de
+  accesibilidad que existe, se anuncia y no hace nada la mayor parte del tiempo,
+  que es peor que no ofrecerlo. Se arregla añadiendo la guía de detalle al
+  `system` en `app/api/chat/route.ts`, donde el modelo no puede ignorarla.
 - ~~`prompts/seed/safety.disclaimer.md` está sembrado y sin usar todavía.~~
   **Resuelto nueve fases después.** El descargo bajo el campo de escritura se
   lee de la tabla `prompts`, con el texto corto de respaldo si la base no
