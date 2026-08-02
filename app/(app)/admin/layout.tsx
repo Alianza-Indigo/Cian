@@ -33,6 +33,8 @@ export default async function AdminLayout({
     { href: '/admin/biblioteca', label: 'Biblioteca' },
     ...(admin.isSuperadmin
       ? [
+          // Lo de plataforma primero: es lo que solo el superadmin puede hacer.
+          { href: '/admin/espacios', label: 'Espacios' },
           { href: '/admin/prompts', label: 'Prompts' },
           { href: '/admin/planes', label: 'Planes' },
         ]
@@ -45,7 +47,7 @@ export default async function AdminLayout({
         <h1 className="text-2xl font-semibold tracking-tight">Administración</h1>
         <p className="mt-2 text-muted-foreground">
           {admin.isSuperadmin
-            ? 'Tienes acceso de plataforma: lo que cambies en prompts, biblioteca y modelo por omisión afecta a todo CIAN.'
+            ? 'Tienes acceso de plataforma: puedes entrar a cualquier espacio y administrarlo, y lo que cambies en prompts, biblioteca y modelo por omisión afecta a todo CIAN. Lo que se habla en una consulta o con CIAN no se ve desde ninguna pantalla de administración.'
             : 'Todo lo que ves aquí es de tu espacio. Los datos de otros espacios no son accesibles desde ninguna ruta.'}
         </p>
       </div>

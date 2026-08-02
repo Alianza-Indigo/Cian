@@ -5,6 +5,88 @@ resuelve en la fase en curso: se anota y se sigue (regla de oro del PRD).
 
 ---
 
+## Transversal — Administración de plataforma: control total, contenido privado no
+
+Dicho por quien es dueño de la plataforma, y tenía razón:
+
+> una cosa es la seguridad y otra es que me estés limitando acceso a mi propia
+> plataforma, debo de ser capaz de manejarla al 100%, entiendo lo de no accesar
+> a datos privados pero debo tener acceso a todo
+
+Durante todas las fases anteriores ninguna consulta cruzaba espacios. Eso
+protegía a las personas, sí, pero además dejaba a quien es dueño de CIAN sin
+poder operarla: no podía ver cuántas organizaciones había, ni verificar la
+cédula de un profesional de otra organización, ni entender qué pasaba en su
+propio producto. Yo lo había defendido como una decisión de seguridad. No lo
+era: era una limitación disfrazada de una.
+
+**La línea correcta no es «no cruzar espacios». Es «control total de la
+operación, ningún acceso al contenido clínico privado».** Son dos cosas
+distintas y hasta ahora estaban mezcladas en una sola.
+
+### De qué lado cae cada cosa
+
+Sí, en cualquier espacio: espacios y sus planes, quién es miembro y con qué
+rol, perfiles profesionales con cédula y documentos, verificar y retirar
+verificaciones, la actividad del consultorio —cuántas citas, entre quiénes, en
+qué estado—, consumo, límites y la bitácora de auditoría.
+
+Nunca: el contenido de las conversaciones con CIAN, las notas de sesión, los
+resúmenes, la bitácora de crisis, la bitácora sensorial, el perfil de
+alimentación, los planes, las rutinas ni los documentos de nadie.
+
+El criterio para separarlas: un correo o un rol **identifican** a alguien; una
+nota de sesión o una bitácora de crisis dicen **lo que le pasa**. Lo primero
+hace falta para operar; lo segundo, no.
+
+### Por qué hay una prueba y no solo un comentario
+
+La mitad de «no leer contenido privado» es fácil de escribir en un comentario y
+fácil de romper sin querer. Basta con que alguien, dentro de seis meses, añada
+un `select` a `session_notes` en `lib/admin/platform.ts` para «poder ayudar
+mejor». No habría error, no habría aviso, y el día que se notara sería porque
+alguien leyó las notas de una consulta ajena.
+
+`tests/platform-admin.test.ts` lee el archivo y falla si aparece el nombre de
+cualquiera de esas tablas. Es una comprobación de texto, no un análisis
+semántico, y basta: para cruzar la línea hay que escribir el nombre de la tabla.
+Quien quiera cruzarla tendrá que **borrar la prueba a mano**, y entonces al
+menos quedará constancia de que fue una decisión y no un descuido. Se comprobó
+que falla de verdad importando `sessionNotes` a propósito antes de darla por
+buena.
+
+La misma prueba exige que toda función exportada de `platform.ts` llame a
+`assertSuperadmin`, para que añadir una función nueva sin guardia no compile en
+verde.
+
+### La auditoría se escribe en el espacio afectado
+
+`setVerificationAnywhere` inserta la fila de auditoría con el `tenantId` del
+espacio tocado, no con el de quien actúa. Así, quien administre ese espacio ve
+en **su propia** bitácora que alguien de plataforma cambió algo suyo. Poder
+hacerlo todo sin dejar rastro es lo peligroso; poder hacerlo todo y que quede,
+es administrar.
+
+Se mantiene la regla que ya existía: sin términos aceptados no se verifica a
+nadie, tampoco desde plataforma. Verificar a quien no ha declarado que la
+responsabilidad profesional es suya sería firmar por él.
+
+### Lo que aún no se puede hacer desde plataforma
+
+Anotado, no resuelto:
+
+- **Cambiar roles o dar de baja miembros de otro espacio.** Hoy se ven los
+  miembros y sus roles desde `/admin/espacios/[tenantId]`, pero modificarlos
+  sigue siendo solo por espacio, desde `/admin/miembros`.
+- **Ajustar el plan o los límites de otro espacio.** `/admin/planes` es global
+  (define los planes); no hay forma de mover un espacio concreto de plan ni de
+  subirle un límite puntual sin pasar por Stripe.
+
+Ambas caen del lado «sí» de la línea: son operación, no contenido. No se
+hicieron ahora por alcance, no por criterio.
+
+---
+
 ## Consultorio — Espacio de trabajo del profesional
 
 Pedido en uso, y con una razón explícita: es la parte que puede monetizar la
