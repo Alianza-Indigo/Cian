@@ -43,6 +43,39 @@ De paso desaparece el `h-[calc(100% - 3.5rem)]` que descontaba a ojo la altura
 del botón de cerrar. Un número mágico así deja de cuadrar en cuanto ese botón
 cambie de tamaño.
 
+### El menú de acciones de cada conversación se recortaba
+
+Detectado al arreglar lo anterior y corregido en el mismo paso.
+
+El menú de tres puntos —cambiar nombre, archivar, eliminar— era `absolute`
+dentro del contenedor de la lista, que tiene `overflow-y-auto`. Al abrirlo en
+la última conversación quedaba **entero por debajo del borde de recorte**: a
+390×780, 122 píxeles fuera y ninguna de las tres opciones visible. No es que se
+viera cortado; es que no se veía, y pulsar el botón parecía no hacer nada.
+
+Técnicamente sí se podía alcanzar —un descendiente absoluto alarga el área
+desplazable del contenedor—, pero eso exige que la persona desplace a ciegas
+después de pulsar un botón que aparentemente no respondió.
+
+Pasa a `position: fixed` con las coordenadas del disparador, que lo saca del
+recorte porque se mide contra el viewport. Comprobado que ningún ancestro
+—`transform`, `filter`, `contain: paint`— crea bloque contenedor para elementos
+fijos, que es lo que lo habría vuelto a recortar en silencio.
+
+Sigue viviendo en el DOM junto a su botón, así que para un lector de pantalla el
+menú y lo que lo abrió no se separan.
+
+**Y se cierra donde antes no se cerraba.** No había ni Escape ni cierre al tocar
+fuera: el menú se quedaba abierto hasta volver a pulsar el mismo botón. Ahora se
+cierra con Escape —devolviendo el foco al disparador—, al tocar fuera, al
+desplazar y al cambiar el tamaño de la ventana. Al desplazar se cierra en vez de
+recolocarse a propósito: un menú pegado al viewport mientras la lista se mueve
+debajo acaba señalando a otra conversación, y esas opciones incluyen eliminar.
+
+La altura se mide después de pintarlo, no se calcula de antemano: depende del
+tamaño de letra del sistema, y quien usa esta plataforma es bastante probable
+que lo tenga subido.
+
 ### Decisiones del arreglo
 
 - **El pie queda fijo**, fuera del scroll. La cuenta y cerrar sesión tienen que

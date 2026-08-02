@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Archive, Check, MoreHorizontal, Pencil, Search, Trash2, X } from 'lucide-react';
@@ -31,8 +31,117 @@ export function ConversationHistory({
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  /*
+   * El menú de acciones se posiciona con `fixed`, no con `absolute`.
+   *
+   * Estaba dentro de un contenedor con `overflow-y-auto`, y eso lo recortaba:
+   * al abrirlo en la última conversación de la lista quedaban 122 píxeles
+   * tapados —medido a 390×780— y «Eliminar» no se veía. El menú alargaba el
+   * área desplazable, así que técnicamente se podía llegar a él desplazando
+   * otros 122 píxeles, pero nadie lo adivina: lo que se ve es un menú cortado.
+   *
+   * Con `fixed` sale del recorte porque se mide contra el viewport. Se guardan
+   * las coordenadas del disparador al abrirlo, y por eso el menú se cierra al
+   * desplazar: quedarse pegado al viewport mientras la lista se mueve debajo lo
+   * dejaría señalando a otra conversación, que es peor que cerrarse.
+   */
+  const [menu, setMenu] = useState<{
+    id: string;
+    top: number;
+    right: number;
+  } | null>(null);
+
+  const openMenuId = menu?.id ?? null;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  function setOpenMenuId(id: string | null) {
+    if (id === null) {
+      setMenu(null);
+      return;
+    }
+
+    const trigger = triggerRefs.current.get(id);
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    setMenu({
+      id,
+      top: rect.bottom + 4,
+      // Alineado por la derecha con el botón, como estaba con `right-0`.
+      right: window.innerWidth - rect.right,
+    });
+  }
+
+  /*
+   * Si el menú se sale por abajo, se sube hasta que quepa.
+   *
+   * Se mide después de pintarlo en vez de calcular su altura de antemano: el
+   * alto real depende del tamaño de letra del sistema, y quien usa esta
+   * plataforma es bastante probable que lo tenga subido.
+   */
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el || !menu) return;
+
+    const MARGEN = 8;
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom <= window.innerHeight - MARGEN) return;
+
+    const top = Math.max(MARGEN, window.innerHeight - MARGEN - rect.height);
+    if (Math.abs(top - menu.top) > 1) setMenu({ ...menu, top });
+  }, [menu]);
+
+  /*
+   * Cerrar el menú: con Escape, al tocar fuera, al desplazar y al cambiar el
+   * tamaño de la ventana.
+   *
+   * Lo de tocar fuera y Escape faltaba: el menú se quedaba abierto hasta que se
+   * volviera a pulsar el mismo botón, incluso navegando a otra pantalla.
+   */
+  useEffect(() => {
+    if (!menu) return;
+
+    const alDesplazar = () => setMenu(null);
+
+    const alPulsarTecla = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenu(null);
+      triggerRefs.current.get(menu.id)?.focus();
+    };
+
+    const alTocarFuera = (event: PointerEvent) => {
+      const objetivo = event.target as Node;
+      if (menuRef.current?.contains(objetivo)) return;
+      // El propio disparador se ignora: su `onClick` ya alterna el menú, y
+      // cerrarlo aquí lo volvería a abrir un instante después.
+      if (triggerRefs.current.get(menu.id)?.contains(objetivo)) return;
+      setMenu(null);
+    };
+
+    // `true` para capturar también el desplazamiento de la lista, que no burbujea.
+    window.addEventListener('scroll', alDesplazar, true);
+    window.addEventListener('resize', alDesplazar);
+    document.addEventListener('keydown', alPulsarTecla);
+    document.addEventListener('pointerdown', alTocarFuera);
+
+    return () => {
+      window.removeEventListener('scroll', alDesplazar, true);
+      window.removeEventListener('resize', alDesplazar);
+      document.removeEventListener('keydown', alPulsarTecla);
+      document.removeEventListener('pointerdown', alTocarFuera);
+    };
+  }, [menu]);
+
+  /* Al abrirlo, el foco entra en la primera opción: es un menú, no un aviso. */
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector('button')?.focus();
+    // Solo al cambiar de conversación, no en cada reajuste de posición.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu?.id]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -172,11 +281,16 @@ export function ConversationHistory({
                 </Link>
 
                 <Button
+                  ref={(node) => {
+                    if (node) triggerRefs.current.set(conversation.id, node);
+                    else triggerRefs.current.delete(conversation.id);
+                  }}
                   type="button"
                   variant="ghost"
                   size="icon"
                   aria-label={`Acciones de "${title}"`}
                   aria-expanded={openMenuId === conversation.id}
+                  aria-haspopup="menu"
                   disabled={isPending}
                   onClick={() =>
                     setOpenMenuId(
@@ -187,11 +301,23 @@ export function ConversationHistory({
                   <MoreHorizontal aria-hidden="true" />
                 </Button>
 
-                {openMenuId === conversation.id ? (
+                {menu && menu.id === conversation.id ? (
                   <div
+                    ref={menuRef}
                     role="menu"
                     aria-label={`Acciones de "${title}"`}
-                    className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-border bg-card p-1 shadow-sm"
+                    /*
+                     * `fixed` con coordenadas del disparador: es lo que lo saca
+                     * del recorte del contenedor con scroll. Sigue viviendo en
+                     * el DOM junto a su botón, así que para un lector de
+                     * pantalla el menú y lo que lo abrió no se separan.
+                     */
+                    style={{
+                      position: 'fixed',
+                      top: menu.top,
+                      right: menu.right,
+                    }}
+                    className="z-50 w-48 rounded-lg border border-border bg-card p-1 shadow-lg"
                   >
                     <button
                       type="button"
