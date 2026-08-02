@@ -10,6 +10,7 @@
  * propósito: permite filtrar por tenant en la misma consulta vectorial, sin
  * unir tablas dentro de la búsqueda por similitud.
  */
+import { sql } from 'drizzle-orm';
 import {
   index,
   integer,
@@ -63,7 +64,25 @@ export const libraryResources = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex('library_resources_slug_uq').on(table.slug),
+    /*
+     * El `slug` es único **dentro de su ámbito**, no en toda la tabla.
+     *
+     * Antes lo era en toda la tabla, y eso era un fallo con dientes: en cuanto
+     * un espacio pudiera publicar contenido propio, un recurso suyo llamado
+     * `rutinas-manana` habría sobrescrito el global de CIAN con ese nombre —el
+     * `upsert` resuelve el conflicto por `slug`— y todos los demás espacios
+     * habrían empezado a leer el texto de ese uno.
+     *
+     * Son dos índices parciales y no uno de `(tenant_id, slug)` porque en
+     * Postgres dos `NULL` no chocan entre sí: con un índice compuesto, dos
+     * recursos globales con el mismo slug pasarían sin protestar.
+     */
+    uniqueIndex('library_resources_global_slug_uq')
+      .on(table.slug)
+      .where(sql`${table.tenantId} is null`),
+    uniqueIndex('library_resources_tenant_slug_uq')
+      .on(table.tenantId, table.slug)
+      .where(sql`${table.tenantId} is not null`),
     index('library_resources_category_idx').on(table.category),
     index('library_resources_tenant_idx').on(table.tenantId),
   ],

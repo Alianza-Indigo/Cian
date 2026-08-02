@@ -157,15 +157,24 @@ const resourceSchema = z.object({
   tags: z.array(z.string().min(1).max(60)).max(20).default([]),
   source: z.string().max(300).optional(),
   content: z.string().min(20).max(200_000),
+  /**
+   * `espacio` = solo lo ve este espacio. `global` = lo ve todo CIAN, y para eso
+   * hace falta ser superadmin.
+   */
+  scope: z.enum(['espacio', 'global']).default('espacio'),
 });
 
 /**
  * Crea o actualiza un recurso de la biblioteca desde el panel.
  *
  * Es lo que responde a una petición explícita: no debería hacer falta editar
- * archivos del repositorio para publicar contenido. Los recursos creados aquí
- * son globales —visibles para todo CIAN— y por eso los toca solo el
- * superadmin.
+ * archivos del repositorio para publicar contenido.
+ *
+ * **Dos ámbitos.** Publicar para todo CIAN es de la plataforma y sigue siendo
+ * cosa del superadmin. Publicar para el propio espacio lo puede hacer quien lo
+ * administra: la Fase 6 pedía que un espacio cargara sus recursos propios —sus
+ * protocolos, sus formatos, lo suyo— y hasta ahora eso existía en el modelo de
+ * datos y en las lecturas, y no se podía hacer desde ninguna pantalla.
  *
  * El indexado —trocear y calcular embeddings— ocurre dentro y puede tardar unos
  * segundos: son varias llamadas al modelo de embeddings.
@@ -182,14 +191,22 @@ export async function saveLibraryResourceAction(
   }
 
   try {
-    const admin = await assertSuperadmin('saveLibraryResource');
-    const result = await saveLibraryResource(parsed.data);
+    const admin =
+      parsed.data.scope === 'global'
+        ? await assertSuperadmin('saveLibraryResource')
+        : await assertTenantAdmin('saveLibraryResource');
+
+    const result = await saveLibraryResource({
+      ...parsed.data,
+      tenantId: parsed.data.scope === 'global' ? null : admin.ctx.tenantId,
+    });
 
     await recordAudit(admin.ctx, {
       action: 'admin.library_save',
       entity: 'library_resource',
       metadata: {
         slug: parsed.data.slug,
+        ambito: parsed.data.scope,
         indexado: result.indexed,
         fragmentos: result.chunks,
       },
@@ -214,19 +231,31 @@ export async function saveLibraryResourceAction(
 
 export async function deleteLibraryResourceAction(
   slug: string,
+  scope: 'espacio' | 'global' = 'espacio',
 ): Promise<AdminActionResult> {
   if (!/^[a-z0-9-]+$/.test(slug)) {
     return { ok: false, error: 'Identificador no válido.' };
   }
 
+  if (scope !== 'espacio' && scope !== 'global') {
+    return { ok: false, error: 'Ámbito no válido.' };
+  }
+
   try {
-    const admin = await assertSuperadmin('deleteLibraryResource');
-    await removeLibraryResource(slug);
+    const admin =
+      scope === 'global'
+        ? await assertSuperadmin('deleteLibraryResource')
+        : await assertTenantAdmin('deleteLibraryResource');
+
+    await removeLibraryResource(
+      slug,
+      scope === 'global' ? null : admin.ctx.tenantId,
+    );
 
     await recordAudit(admin.ctx, {
       action: 'admin.library_delete',
       entity: 'library_resource',
-      metadata: { slug },
+      metadata: { slug, ambito: scope },
     });
 
     revalidatePath('/admin/biblioteca');

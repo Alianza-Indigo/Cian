@@ -14,6 +14,7 @@ import {
   completeTask,
   createTask,
   deleteTask,
+  prioritizeTasks,
   updateTask,
 } from '../db/repositories/tasks';
 import { SENSITIVITY_LEVELS, SENSORY_DOMAINS, TASK_PRIORITIES, TASK_STATUSES } from './types';
@@ -202,5 +203,87 @@ export async function deleteTaskAction(taskId: string): Promise<ActionResult> {
     return { ok: true };
   } catch {
     return fail('No pudimos eliminar la tarea.');
+  }
+}
+
+/**
+ * Pone o quita la fecha límite.
+ *
+ * `due_at` existía en la base desde la Fase 5 y no había forma de escribirlo
+ * desde la plataforma: la columna estaba ahí, muerta.
+ *
+ * El instante llega ya construido desde el navegador, no como «2026-08-14».
+ * Una fecha suelta habría que interpretarla en algún huso, y el del servidor no
+ * es el de nadie: en Tijuana una tarea para el jueves se habría guardado como
+ * miércoles.
+ */
+export async function setTaskDueAtAction(
+  taskId: string,
+  isoInstant: string | null,
+): Promise<ActionResult> {
+  if (!idSchema.safeParse(taskId).success) return fail('Tarea no válida.');
+
+  let dueAt: Date | null = null;
+
+  if (isoInstant !== null) {
+    const parsed = new Date(isoInstant);
+    if (Number.isNaN(parsed.getTime())) return fail('Esa fecha no es válida.');
+    dueAt = parsed;
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    await updateTask(ctx, taskId, { dueAt });
+    revalidatePath('/tareas');
+    return { ok: true };
+  } catch {
+    return fail('No pudimos guardar la fecha.');
+  }
+}
+
+export async function setTaskPriorityAction(
+  taskId: string,
+  priority: string,
+): Promise<ActionResult> {
+  if (!idSchema.safeParse(taskId).success) return fail('Tarea no válida.');
+
+  const parsed = z.enum(TASK_PRIORITIES).safeParse(priority);
+  if (!parsed.success) return fail('Prioridad no válida.');
+
+  try {
+    const ctx = await requireTenantContext();
+    await updateTask(ctx, taskId, { priority: parsed.data });
+    revalidatePath('/tareas');
+    return { ok: true };
+  } catch {
+    return fail('No pudimos cambiar la prioridad.');
+  }
+}
+
+/**
+ * Reordena las tareas de primer nivel.
+ *
+ * `prioritizeTasks` estaba en el repositorio desde la Fase 5 y solo lo podía
+ * llamar el modelo. Que CIAN pueda reordenar tu lista y tú no es exactamente al
+ * revés de como debería ser.
+ */
+export async function reorderTasksAction(
+  orderedTaskIds: string[],
+): Promise<ActionResult> {
+  if (!Array.isArray(orderedTaskIds) || orderedTaskIds.length === 0) {
+    return fail('No hay nada que reordenar.');
+  }
+
+  if (orderedTaskIds.some((id) => !idSchema.safeParse(id).success)) {
+    return fail('Alguna tarea no es válida.');
+  }
+
+  try {
+    const ctx = await requireTenantContext();
+    await prioritizeTasks(ctx, orderedTaskIds);
+    revalidatePath('/tareas');
+    return { ok: true };
+  } catch {
+    return fail('No pudimos guardar el orden.');
   }
 }

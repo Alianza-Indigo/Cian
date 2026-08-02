@@ -25,10 +25,12 @@ export default async function AdminLayout({
     { href: '/admin/miembros', label: 'Miembros' },
     { href: '/admin/modelos', label: 'Modelos' },
     { href: '/admin/auditoria', label: 'Auditoría' },
+    // La biblioteca la ve cualquier admin: publica para su espacio. Solo el
+    // superadmin ve además la lista global y puede publicar en ella.
+    { href: '/admin/biblioteca', label: 'Biblioteca' },
     ...(admin.isSuperadmin
       ? [
           { href: '/admin/prompts', label: 'Prompts' },
-          { href: '/admin/biblioteca', label: 'Biblioteca' },
           { href: '/admin/planes', label: 'Planes' },
         ]
       : []),

@@ -189,6 +189,7 @@ export async function updateTask(
     priority?: TaskPriority;
     status?: TaskStatus;
     estimatedMinutes?: number | null;
+    dueAt?: Date | null;
     orderIndex?: number;
   },
 ): Promise<TaskRow> {
@@ -208,6 +209,7 @@ export async function updateTask(
   if (input.estimatedMinutes !== undefined) {
     patch.estimatedMinutes = clampMinutes(input.estimatedMinutes);
   }
+  if (input.dueAt !== undefined) patch.dueAt = input.dueAt;
   if (input.orderIndex !== undefined) patch.orderIndex = input.orderIndex;
   if (input.status !== undefined) {
     patch.status = input.status;

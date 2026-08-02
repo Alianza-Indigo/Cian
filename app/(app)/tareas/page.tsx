@@ -27,6 +27,7 @@ export default async function TareasPage() {
           status: task.status,
           priority: task.priority,
           estimatedMinutes: task.estimatedMinutes,
+          dueAt: task.dueAt ? task.dueAt.toISOString() : null,
           subtasks: task.subtasks.map((subtask) => ({
             id: subtask.id,
             title: subtask.title,

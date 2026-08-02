@@ -37,6 +37,16 @@ export type SaveResourceInput = {
   tags: string[];
   source?: string;
   content: string;
+  /**
+   * `null` = contenido global de CIAN, visible para todo el mundo. Un UUID =
+   * contenido propio de ese espacio, que solo ve él.
+   *
+   * Hasta ahora esto siempre valía `null` y el comentario decía que los
+   * recursos de un espacio «se administran desde su espacio». No se
+   * administraban desde ningún sitio: la Fase 6 los contemplaba en el modelo de
+   * datos y en las lecturas, y no había forma de crear uno.
+   */
+  tenantId: string | null;
 };
 
 export type SaveResourceResult = {
@@ -58,8 +68,7 @@ export async function saveLibraryResource(
 
   const result = await upsertResourceWithChunks(
     {
-      // `null` = contenido global de CIAN, visible para todo el mundo.
-      tenantId: null,
+      tenantId: input.tenantId,
       slug: input.slug,
       title: input.title.trim(),
       category: input.category,
@@ -82,12 +91,26 @@ export async function saveLibraryResource(
   };
 }
 
-export async function removeLibraryResource(slug: string): Promise<void> {
-  // Solo recursos globales: los de un tenant se administran desde su espacio.
+/**
+ * Retira un recurso **de su ámbito**.
+ *
+ * El `tenantId` no es opcional a propósito: quien borra tiene que decir si
+ * borra el global o el de su espacio. Un valor por omisión aquí acabaría
+ * borrando contenido de toda la plataforma desde el panel de un espacio.
+ */
+export async function removeLibraryResource(
+  slug: string,
+  tenantId: string | null,
+): Promise<void> {
   await db
     .delete(libraryResources)
     .where(
-      and(eq(libraryResources.slug, slug), isNull(libraryResources.tenantId)),
+      and(
+        eq(libraryResources.slug, slug),
+        tenantId === null
+          ? isNull(libraryResources.tenantId)
+          : eq(libraryResources.tenantId, tenantId),
+      ),
     );
 }
 
@@ -102,11 +125,18 @@ export type AdminResource = {
   content: string;
 };
 
-export async function listGlobalResources(): Promise<AdminResource[]> {
+/** Recursos de un ámbito: `null` para los globales, un UUID para los de un espacio. */
+export async function listResourcesInScope(
+  tenantId: string | null,
+): Promise<AdminResource[]> {
   const rows = await db
     .select()
     .from(libraryResources)
-    .where(isNull(libraryResources.tenantId))
+    .where(
+      tenantId === null
+        ? isNull(libraryResources.tenantId)
+        : eq(libraryResources.tenantId, tenantId),
+    )
     .orderBy(libraryResources.title);
 
   return rows.map((row) => ({
@@ -119,4 +149,8 @@ export async function listGlobalResources(): Promise<AdminResource[]> {
     updatedAt: row.updatedAt,
     content: row.content,
   }));
+}
+
+export async function listGlobalResources(): Promise<AdminResource[]> {
+  return listResourcesInScope(null);
 }

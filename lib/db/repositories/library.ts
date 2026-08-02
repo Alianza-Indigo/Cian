@@ -215,10 +215,25 @@ export async function upsertResourceWithChunks(
   input: UpsertResourceInput,
   chunks: Array<{ content: string; embedding: number[] | null }>,
 ): Promise<{ indexed: boolean; resourceId: string }> {
+  /*
+   * El recurso se busca **dentro de su ámbito**. Buscar solo por `slug` hacía
+   * que un recurso propio de un espacio encontrara el global de CIAN con ese
+   * nombre y lo pisara.
+   */
+  const scope = input.tenantId
+    ? and(
+        eq(libraryResources.slug, input.slug),
+        eq(libraryResources.tenantId, input.tenantId),
+      )
+    : and(
+        eq(libraryResources.slug, input.slug),
+        isNull(libraryResources.tenantId),
+      );
+
   const [existing] = await db
     .select({ id: libraryResources.id, contentHash: libraryResources.contentHash })
     .from(libraryResources)
-    .where(eq(libraryResources.slug, input.slug))
+    .where(scope)
     .limit(1);
 
   if (existing && existing.contentHash === input.contentHash) {
@@ -240,7 +255,14 @@ export async function upsertResourceWithChunks(
         contentHash: input.contentHash,
       })
       .onConflictDoUpdate({
-        target: libraryResources.slug,
+        // Cada ámbito tiene su propio índice parcial y hay que nombrarlo, o
+        // Postgres no sabe cuál de los dos resuelve el conflicto.
+        target: input.tenantId
+          ? [libraryResources.tenantId, libraryResources.slug]
+          : [libraryResources.slug],
+        targetWhere: input.tenantId
+          ? sql`${libraryResources.tenantId} is not null`
+          : sql`${libraryResources.tenantId} is null`,
         set: {
           title: input.title,
           category: input.category,
