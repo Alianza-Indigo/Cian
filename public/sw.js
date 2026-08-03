@@ -8,7 +8,17 @@
  * que no mostrar nada. Por eso solo se guardan recursos estaticos publicos.
  */
 
-const CACHE_NAME = 'cian-shell-v1';
+/*
+ * Sube de version cuando cambie algo de PRECACHE_URLS.
+ *
+ * Al cambiar el logotipo esto no era opcional: los iconos estan precacheados y
+ * se sirven de cache primero, asi que quien ya tuviera la aplicacion instalada
+ * habria seguido viendo el logo viejo indefinidamente. El manejador de
+ * `activate` borra las caches que no sean esta, asi que basta con el nombre.
+ *
+ * v2 — logotipo nuevo.
+ */
+const CACHE_NAME = 'cian-shell-v2';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_URLS = [
@@ -16,6 +26,9 @@ const PRECACHE_URLS = [
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  // La pantalla sin conexion lo enseña, y sin conexion no se puede ir a
+  // buscarlo: si no esta aqui, se ve rota justo cuando importa.
+  '/brand/cian-logo.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -70,8 +83,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Recursos estaticos publicos: primero cache, luego red.
-  if (url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json') {
+  /*
+   * Recursos estaticos publicos: primero cache, luego red.
+   *
+   * `/brand/` entra aqui y no solo en PRECACHE_URLS. Precachear un archivo no
+   * sirve de nada si el manejador no lo busca en cache: la peticion se iria a
+   * la red igual, y sin conexion la pantalla de «sin conexion» se veria sin
+   * logotipo, que es justo el momento en que no hay a donde ir a buscarlo.
+   */
+  if (
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.startsWith('/brand/') ||
+    url.pathname === '/manifest.json'
+  ) {
     event.respondWith(
       caches.match(request).then((cached) => cached ?? fetch(request)),
     );

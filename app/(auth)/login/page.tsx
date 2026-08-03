@@ -58,7 +58,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     >
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <CianMark className="size-16" />
+          <CianMark className="h-16" priority />
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">CIAN</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Centro Integral de Apoyo a la Neurodivergencia

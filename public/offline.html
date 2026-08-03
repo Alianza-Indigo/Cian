@@ -61,17 +61,20 @@
   </head>
   <body>
     <main>
-      <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="CIAN">
-        <rect width="64" height="64" rx="14" fill="#1b1f5a" />
-        <path
-          d="M44 20a17 17 0 1 0 0 24"
-          fill="none"
-          stroke="#c9a227"
-          stroke-width="6"
-          stroke-linecap="round"
-        />
-        <circle cx="32" cy="32" r="4" fill="#c9a227" />
-      </svg>
+      <!--
+        El logotipo, como archivo y no dibujado aquí.
+
+        Esta página se sirve desde la caché del service worker, así que el
+        archivo tiene que estar precacheado también: si no, la única pantalla
+        que se ve sin conexión aparecería sin marca. Ver PRECACHE_URLS en sw.js.
+      -->
+      <img
+        src="/brand/cian-logo.png"
+        alt="CIAN"
+        width="128"
+        height="90"
+        style="height: 64px; width: auto"
+      />
       <h1>Sin conexión</h1>
       <p>
         No pudimos conectar con CIAN. Revisa tu conexión a internet y vuelve a

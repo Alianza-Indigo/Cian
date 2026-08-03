@@ -74,7 +74,7 @@ function MessageText({ text }: { text: string }) {
 function EmptyState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-      <CianMark className="size-14" />
+      <CianMark className="h-14" />
       <h2 className="mt-4 text-xl font-semibold tracking-tight">
         ¿En qué te acompaño?
       </h2>

@@ -199,7 +199,7 @@ export function AppShell({
       {/* --- Cabecera fija ------------------------------------------------ */}
       <div className="flex shrink-0 flex-col gap-3 p-4 pb-3">
         <div className="flex items-center gap-3">
-          <CianMark className="size-9" />
+          <CianMark className="h-9" priority />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">CIAN</p>
             <p className="truncate text-xs text-muted-foreground">{tenantName}</p>
@@ -402,7 +402,7 @@ export function AppShell({
             <Menu aria-hidden="true" />
           </Button>
           <div className="flex min-w-0 items-center gap-2">
-            <CianMark className="size-7" />
+            <CianMark className="h-7" priority />
             <span className="truncate text-sm font-semibold">CIAN</span>
           </div>
           <Link
